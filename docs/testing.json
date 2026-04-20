@@ -1,0 +1,306 @@
+run server -
+(penv) C:\Users\HP\Downloads\admission-ai (3)\backend>uvicorn app.main:app --reload
+{
+    "base_url": "http://localhost:8000/api",
+    "test_user": {
+        "fullName": "Rohan Mehta",
+        "email": "rohan.mehta.ai01@gmail.com",
+        "password": "SecurePass123",
+        "instituteName": "NextGen Academy"
+    },
+    "flow": [
+        {
+            "step": "1. DEV SEED",
+            "request": {
+                "method": "POST",
+                "url": "/dev/seed",
+                "body": {}
+            },
+            "response": {
+                "success": true,
+                "message": "Demo data seeded"
+            }
+        },
+        {
+            "step": "2. REGISTER",
+            "request": {
+                "method": "POST",
+                "url": "/auth/register",
+                "body": {
+                    "fullName": "Rohan Mehta",
+                    "email": "rohan.mehta.ai01@gmail.com",
+                    "password": "SecurePass123",
+                    "instituteName": "NextGen Academy"
+                }
+            },
+            "response": {
+                "success": true,
+                "message": "User registered successfully",
+                "data": {
+                    "userId": 101,
+                    "email": "rohan.mehta.ai01@gmail.com"
+                }
+            }
+        },
+        {
+            "step": "3. LOGIN",
+            "request": {
+                "method": "POST",
+                "url": "/auth/login",
+                "body": {
+                    "email": "rohan.mehta.ai01@gmail.com",
+                    "password": "SecurePass123"
+                }
+            },
+            "response": {
+                "success": true,
+                "message": "Login successful",
+                "data": {
+                    "access_token": "JWT_TOKEN_SAMPLE",
+                    "user": {
+                        "id": 101,
+                        "role": "admin"
+                    }
+                }
+            }
+        },
+        {
+            "step": "4. ONBOARDING",
+            "request": {
+                "method": "POST",
+                "url": "/onboarding/setup",
+                "body": {
+                    "fullName": "Rohan Mehta",
+                    "email": "rohan.mehta.ai01@gmail.com",
+                    "instituteName": "NextGen Academy"
+                }
+            },
+            "response": {
+                "success": true,
+                "message": "Onboarding completed",
+                "data": {
+                    "instituteId": 55,
+                    "onboardingStatus": true
+                }
+            }
+        },
+        {
+            "step": "5. KNOWLEDGE BASE UPLOAD",
+            "request": {
+                "method": "POST",
+                "url": "/knowledge-base/upload",
+                "body": "form-data(file: nextgen_brochure.pdf)"
+            },
+            "response": {
+                "success": true,
+                "message": "File uploaded",
+                "data": {
+                    "id": 201,
+                    "fileName": "nextgen_brochure.pdf",
+                    "status": "processing"
+                }
+            }
+        },
+        {
+            "step": "6. SAVE PERSONA",
+            "request": {
+                "method": "POST",
+                "url": "/knowledge-base/persona/save",
+                "body": {
+                    "agent_name": "Aisha",
+                    "designation": "Senior Admission Advisor",
+                    "tone_style": "professional",
+                    "voice_gender": "female",
+                    "voice_speed": 1.1,
+                    "persona_description": "Confident and helpful counselor guiding students"
+                }
+            },
+            "response": {
+                "success": true,
+                "message": "Persona saved",
+                "data": {
+                    "id": 301,
+                    "agent_name": "Aisha"
+                }
+            }
+        },
+        {
+            "step": "7. SAVE SCRIPT",
+            "request": {
+                "method": "POST",
+                "url": "/knowledge-base/script/save",
+                "body": {
+                    "sections": [
+                        {
+                            "id": "intro",
+                            "title": "Introduction",
+                            "content": "Hello {{name}}, this is Aisha from NextGen Academy.",
+                            "isActive": true
+                        },
+                        {
+                            "id": "pitch",
+                            "title": "Course Pitch",
+                            "content": "We offer industry-ready AI and Data Science programs.",
+                            "isActive": true
+                        }
+                    ]
+                }
+            },
+            "response": {
+                "success": true,
+                "message": "Script saved",
+                "data": {
+                    "scriptId": 401
+                }
+            }
+        },
+        {
+            "step": "8. LEADS UPLOAD",
+            "request": {
+                "method": "POST",
+                "url": "/leads/upload-csv",
+                "body": "form-data(file: leads.csv)"
+            },
+            "response": {
+                "success": true,
+                "message": "Leads uploaded",
+                "data": {
+                    "totalRecords": 20,
+                    "savedLeads": 18
+                }
+            }
+        },
+        {
+            "step": "9. CAMPAIGN",
+            "request": {
+                "method": "POST",
+                "url": "/leads/campaign/launch",
+                "body": {
+                    "callingDays": [
+                        "Mon",
+                        "Wed",
+                        "Fri"
+                    ],
+                    "timeStart": "10:00",
+                    "timeEnd": "17:00",
+                    "maxAttempts": 2,
+                    "fallbackName": "Support Team",
+                    "fallbackPhone": "+918888888888"
+                }
+            },
+            "response": {
+                "success": true,
+                "message": "Campaign launched",
+                "data": {
+                    "campaignId": 501,
+                    "status": "active"
+                }
+            }
+        },
+        {
+            "step": "10. CALL",
+            "request": {
+                "method": "POST",
+                "url": "/calls/trigger",
+                "body": {
+                    "leadId": 1
+                }
+            },
+            "response": {
+                "success": true,
+                "message": "Call started",
+                "data": {
+                    "callId": 601,
+                    "status": "in-progress"
+                }
+            }
+        },
+        {
+            "step": "11. ACTIVE CONVERSATIONS",
+            "request": {
+                "method": "GET",
+                "url": "/conversations/active"
+            },
+            "response": {
+                "success": true,
+                "data": [
+                    {
+                        "id": 701,
+                        "leadName": "Priya Singh",
+                        "aiPaused": false,
+                        "lastMessage": "Are you interested in AI course?"
+                    }
+                ]
+            }
+        },
+        {
+            "step": "12. CONVERSATION THREAD",
+            "request": {
+                "method": "GET",
+                "url": "/conversations/701"
+            },
+            "response": {
+                "success": true,
+                "data": {
+                    "messages": [
+                        {
+                            "speaker": "ai",
+                            "content": "Hello Priya, this is Aisha from NextGen Academy."
+                        },
+                        {
+                            "speaker": "user",
+                            "content": "Yes, I want details."
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "step": "13. REPLY",
+            "request": {
+                "method": "POST",
+                "url": "/conversations/701/reply",
+                "body": {
+                    "content": "Sure, I will guide you step by step."
+                }
+            },
+            "response": {
+                "success": true,
+                "message": "Reply sent",
+                "data": {
+                    "aiPaused": true
+                }
+            }
+        },
+        {
+            "step": "14. BOOKING",
+            "request": {
+                "method": "POST",
+                "url": "/bookings/1/update",
+                "body": {
+                    "status": "confirmed",
+                    "agentAssignedId": 301
+                }
+            },
+            "response": {
+                "success": true,
+                "message": "Booking updated"
+            }
+        },
+        {
+            "step": "15. SETTINGS",
+            "request": {
+                "method": "POST",
+                "url": "/settings/save",
+                "body": {
+                    "whatsappEnabled": true,
+                    "callEnabled": true
+                }
+            },
+            "response": {
+                "success": true,
+                "message": "Settings saved"
+            }
+        }
+    ]
+}
