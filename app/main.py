@@ -19,11 +19,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # -----------------------------
-# Create Tables (OK for now)
-# -----------------------------
-Base.metadata.create_all(bind=engine)
-
-# -----------------------------
 # FastAPI App
 # -----------------------------
 app = FastAPI(
@@ -31,9 +26,24 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json"
 )
 
+@app.on_event("startup")
+async def startup_event():
+    logger.info(f"Starting {settings.PROJECT_NAME}...")
+    logger.info(f"DATABASE_URL is set: {'Yes' if settings.DATABASE_URL else 'No'}")
+    logger.info(f"SECRET_KEY is set: {'Yes' if settings.SECRET_KEY else 'No'}")
+    
+    # Run table creation in a threadpool to avoid blocking the event loop
+    import asyncio
+    try:
+        logger.info("Connecting to database and creating tables...")
+        await asyncio.to_thread(Base.metadata.create_all, bind=engine)
+        logger.info("Database tables checked/created successfully")
+    except Exception as e:
+        logger.error(f"Error during database initialization: {e}")
+        # We don't raise here so the app can still bind to the port and respond to health checks
+
 # -----------------------------
 # Custom Middleware
-# (added first = executes LAST in Starlette's LIFO chain)
 # -----------------------------
 app.add_middleware(ResponseWrapperMiddleware)
 

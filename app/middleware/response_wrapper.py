@@ -14,17 +14,13 @@ class ResponseWrapperMiddleware(BaseHTTPMiddleware):
         try:
             response = await call_next(request)
         except Exception as e:
-            # This should rarely be hit now due to global handlers, 
-            # but serves as a final safety net.
+            logger.error(f"Error in ResponseWrapperMiddleware: {e}", exc_info=True)
             return JSONResponse(
                 status_code=500,
                 content={
                     "success": False,
-                    "message": "Something went wrong",
-                    "error": {
-                        "code": "SERVER_ERROR",
-                        "details": str(e)
-                    }
+                    "message": "Internal server error during response processing",
+                    "data": None
                 }
             )
         
@@ -33,24 +29,53 @@ class ResponseWrapperMiddleware(BaseHTTPMiddleware):
         if request.url.path in exclude_paths or not request.url.path.startswith("/api"):
             return response
 
-        # Read the body carefully
-        response_body = b""
-        async for chunk in response.body_iterator:
-            response_body += chunk
-
-        # Pre-clean headers (remove body-specific and hop-by-hop headers)
-        # JSONResponse will set its own Content-Length and Content-Type
-        exclude_headers = {
-            "content-length", "content-type", "transfer-encoding", 
-            "connection", "keep-alive", "proxy-authenticate", 
-            "proxy-authorization", "te", "trailers", "upgrade"
-        }
-        new_headers = {k: v for k, v in response.headers.items() 
-                       if k.lower() not in exclude_headers}
-
-        # Safety check: if no body, don't try to parse JSON
-        if not response_body:
+        # Only wrap JSON responses and skip empty/streaming responses
+        content_type = response.headers.get("content-type", "")
+        if "application/json" not in content_type.lower() or response.status_code == 204:
             return response
+
+        # Read the body
+        response_body = b""
+        try:
+            async for chunk in response.body_iterator:
+                response_body += chunk
+        except Exception as e:
+            logger.error(f"Could not read response body: {e}")
+            # If we fail to read the body, we can't wrap it. 
+            # But we've already started consuming the iterator, so we can't return the original 'response'.
+            # We must return a new error response.
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "success": False,
+                    "message": "Response body consumption failed",
+                    "data": None
+                }
+            )
+
+        # Prepare headers for the new response
+        # We MUST strip Content-Length because JSONResponse will calculate it
+        # We also strip other body-related headers
+        exclude_headers = {
+            "content-length", "content-type", "content-encoding", "transfer-encoding"
+        }
+        new_headers = {
+            k: v for k, v in response.headers.items() 
+            if k.lower() not in exclude_headers
+        }
+
+        # If body is empty, we still want to return a wrapped success/error
+        # but we can't parse it as JSON.
+        if not response_body:
+            return JSONResponse(
+                status_code=response.status_code,
+                content={
+                    "success": response.status_code < 400,
+                    "message": "No content received",
+                    "data": None
+                },
+                headers=new_headers
+            )
 
         try:
             data = json.loads(response_body)
@@ -63,47 +88,51 @@ class ResponseWrapperMiddleware(BaseHTTPMiddleware):
             is_success = response.status_code < 400
             
             if is_success:
-                # Standardize success response
                 wrapped_data = {
                     "success": True,
                     "message": "Action completed successfully",
                     "data": data
                 }
-                # Use 201 for POST success if not already set otherwise
                 status_code = response.status_code
                 if request.method == "POST" and status_code == 200:
                     status_code = 201
                 
                 return JSONResponse(content=wrapped_data, status_code=status_code, headers=new_headers)
             else:
-                # If it's an error but NOT wrapped (e.g. from FastAPI defaults)
+                # Standardize error responses from FastAPI (which usually have a 'detail' field)
+                error_msg = "An error occurred"
+                if isinstance(data, dict):
+                    error_msg = data.get("detail", data.get("message", "An error occurred"))
+                
                 return JSONResponse(
                     status_code=response.status_code,
                     content={
                         "success": False,
-                        "message": data["detail"] if isinstance(data, dict) and "detail" in data else "An error occurred",
-                        "data": None
+                        "message": error_msg,
+                        "data": data
                     },
                     headers=new_headers
                 )
-        except Exception:
-            # Fallback for non-JSON or raw responses
-            try:
-                content = response_body.decode('utf-8')
-            except:
-                content = str(response_body)
-                
+        except json.JSONDecodeError:
+            # Fallback for non-JSON content that was marked as application/json
+            content_str = response_body.decode('utf-8', errors='replace')
             return JSONResponse(
                 content={
                     "success": response.status_code < 400,
-                    "message": "Action completed" if response.status_code < 400 else "An error occurred",
-                    "data": content if response.status_code < 400 else None,
-                    "error": {
-                        "code": "RAW_RESPONSE",
-                        "details": content
-                    } if response.status_code >= 400 else None
+                    "message": "Raw response received",
+                    "data": content_str
                 },
                 status_code=response.status_code,
                 headers=new_headers
+            )
+        except Exception as e:
+            logger.error(f"Unexpected error in middleware logic: {e}")
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "success": False,
+                    "message": "Final middleware safety net",
+                    "data": str(e)
+                }
             )
         
