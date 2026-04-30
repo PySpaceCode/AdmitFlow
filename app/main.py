@@ -35,35 +35,8 @@ async def startup_event():
     logger.info(f"Starting {settings.PROJECT_NAME}...")
     logger.info(f"DATABASE_URL is set: {'Yes' if settings.DATABASE_URL else 'No'}")
     logger.info(f"SECRET_KEY is set: {'Yes' if settings.SECRET_KEY else 'No'}")
-    
-    # Run table creation in a threadpool to avoid blocking the event loop
-    import asyncio
-    try:
-        logger.info("Connecting to database and running migrations...")
-        # Run alembic upgrade head programmatically
-        from alembic.config import Config
-        from alembic import command
-        
-        def run_migrations():
-            try:
-                alembic_cfg = Config("alembic.ini")
-                # We use upgrade head to ensure the database schema is up to date
-                logger.info("Running 'alembic upgrade head'...")
-                command.upgrade(alembic_cfg, "head")
-                logger.info("Alembic migrations completed successfully")
-            except Exception as migration_error:
-                logger.warning(f"Alembic migration failed (this is expected if tables already exist but version table is missing): {migration_error}")
-                logger.info("Attempting fallback with Base.metadata.create_all...")
-            
-            # Fallback to create_all for any missing tables
-            Base.metadata.create_all(bind=engine)
-            logger.info("Table verification/creation completed")
-            
-        await asyncio.to_thread(run_migrations)
-        logger.info("Database initialization completed successfully")
-    except Exception as e:
-        logger.error(f"Error during database initialization: {e}", exc_info=True)
-        # We don't raise here so the app can still bind to the port and respond to health checks
+    logger.info("Database initialization handled by startup script.")
+
 
 # -----------------------------
 # Custom Middleware
