@@ -8,7 +8,7 @@ import os
 
 from app.core.config import settings
 from app.middleware.response_wrapper import ResponseWrapperMiddleware
-from app.api.all_routes import router as all_router
+# all_routes.py is kept on disk but no longer mounted (routes moved to individual routers below)
 from app.db.session import engine, Base
 import app.models  # Ensure all tables are registered
 
@@ -23,7 +23,11 @@ logger = logging.getLogger(__name__)
 # -----------------------------
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json"
+    description="AdmitFlow Backend API - All endpoints are listed below",
+    version="1.0.0",
+    openapi_url="/openapi.json",
+    docs_url="/docs",
+    redoc_url="/redoc"
 )
 
 @app.on_event("startup")
@@ -129,13 +133,20 @@ app.mount("/static", StaticFiles(directory="uploads"), name="static")
 # -----------------------------
 from app.api.routers import auth, onboarding, leads, knowledge_base, dev
 
-app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["auth"])
-app.include_router(onboarding.router, prefix=f"{settings.API_V1_STR}/onboarding", tags=["onboarding"])
-app.include_router(leads.router, prefix=f"{settings.API_V1_STR}/leads", tags=["leads"])
-app.include_router(knowledge_base.router, prefix=f"{settings.API_V1_STR}/knowledge_base", tags=["knowledge_base"])
-app.include_router(dev.router, prefix=f"{settings.API_V1_STR}/dev", tags=["dev"])
-
-app.include_router(all_router, prefix=f"{settings.API_V1_STR}", tags=["all_routes"])
+# -----------------------------
+# Clean & Simple Route Prefixes
+# (No /api prefix — easy to test on Render, easy to call from Vercel)
+# -----------------------------
+# Auth:         POST /register | POST /login | POST /logout
+# Onboarding:   GET /onboarding/status | POST /onboarding/setup
+# Leads:        GET /leads | POST /leads/upload | POST /leads/calling-config
+# Knowledge:    GET /knowledge/documents | POST /knowledge/upload | POST /knowledge/persona | POST /knowledge/script
+# Dev (seed):   POST /dev/seed
+app.include_router(auth.router,           prefix="",             tags=["🔐 Auth"])
+app.include_router(onboarding.router,     prefix="/onboarding",  tags=["🏫 Onboarding"])
+app.include_router(leads.router,          prefix="/leads",       tags=["👥 Leads"])
+app.include_router(knowledge_base.router, prefix="/knowledge",   tags=["📚 Knowledge Base"])
+app.include_router(dev.router,            prefix="/dev",         tags=["🛠 Dev / Seeding"])
 
 # -----------------------------
 # Root Endpoint

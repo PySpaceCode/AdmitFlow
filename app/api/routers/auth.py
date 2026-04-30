@@ -11,7 +11,7 @@ from app.schemas.auth import LoginRequest, RegisterRequest
 
 router = APIRouter()
 
-@router.post("/login")
+@router.post("/login", summary="Login with email & password")
 def login(
     db: Session = Depends(deps.get_db), 
     login_data: LoginRequest = None
@@ -45,7 +45,7 @@ def login(
         }
     }
 
-@router.post("/register", status_code=status.HTTP_201_CREATED)
+@router.post("/register", status_code=status.HTTP_201_CREATED, summary="Register a new user")
 def register(
     db: Session = Depends(deps.get_db),
     reg_data: RegisterRequest = None
@@ -98,7 +98,7 @@ def register(
         }
     }
 
-@router.post("/logout")
+@router.post("/logout", summary="Logout current user")
 def logout(
     current_user: User = Depends(deps.get_current_user)
 ) -> Any:

@@ -12,7 +12,7 @@ router = APIRouter()
 
 UPLOAD_DIR = "uploads/knowledge"
 
-@router.get("/documents")
+@router.get("/documents", summary="List all uploaded knowledge base documents")
 def get_documents(
     db: Session = Depends(deps.get_db),
     institute_id: int = Depends(deps.get_current_institute_id)
@@ -21,7 +21,7 @@ def get_documents(
     # Manual mapping to camelCase for the schema if needed, but the middleware wraps the response
     return docs
 
-@router.post("/upload")
+@router.post("/upload", summary="Upload a PDF/DOCX knowledge base document")
 async def upload_document(
     file: UploadFile = File(..., alias="file"),
     db: Session = Depends(deps.get_db),
@@ -78,7 +78,7 @@ async def upload_document(
         }
     }
 
-@router.post("/persona")
+@router.post("/persona", summary="Save or update the AI agent persona")
 def save_persona(
     persona_data: PersonaSchema,
     db: Session = Depends(deps.get_db),
@@ -121,7 +121,7 @@ def save_persona(
         }
     }
 
-@router.post("/script")
+@router.post("/script", summary="Save or update the calling script")
 def save_script(
     script_data: ScriptSchema,
     db: Session = Depends(deps.get_db),

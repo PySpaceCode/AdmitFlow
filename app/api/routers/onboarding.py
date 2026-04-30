@@ -7,7 +7,7 @@ from app.models.user import User
 
 router = APIRouter()
 
-@router.get("/status")
+@router.get("/status", summary="Get current onboarding status of your institute")
 def get_status(
     db: Session = Depends(deps.get_db),
     institute_id: int = Depends(deps.get_current_institute_id)
@@ -21,7 +21,7 @@ def get_status(
         "progress": 100 if institute.onboarding_status else 50
     }
 
-@router.post("/setup")
+@router.post("/setup", summary="Complete institute onboarding setup")
 def setup_institute(
     setup_data: OnboardingSetupRequest,
     db: Session = Depends(deps.get_db),

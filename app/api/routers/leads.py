@@ -12,14 +12,14 @@ from app.schemas.leads import CallingConfigurationRequest
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-@router.get("/")
+@router.get("/", summary="Get all leads for your institute")
 def get_leads(
     db: Session = Depends(deps.get_db),
     institute_id: int = Depends(deps.get_current_institute_id)
 ):
     return db.query(Lead).filter(Lead.institute_id == institute_id).all()
 
-@router.post("/upload_leads")
+@router.post("/upload", summary="Upload leads from CSV or Excel file")
 async def upload_leads_file(
     file: UploadFile = File(...),
     db: Session = Depends(deps.get_db),
@@ -106,7 +106,7 @@ async def upload_leads_file(
         }
     }
 
-@router.post("/calling_configuration")
+@router.post("/calling-config", summary="Set calling schedule and agent configuration")
 def configure_calling(
     config_data: CallingConfigurationRequest,
     db: Session = Depends(deps.get_db),
