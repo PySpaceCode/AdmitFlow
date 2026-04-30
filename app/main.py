@@ -39,9 +39,19 @@ async def startup_event():
     # Run table creation in a threadpool to avoid blocking the event loop
     import asyncio
     try:
-        logger.info("Connecting to database and creating tables...")
-        await asyncio.to_thread(Base.metadata.create_all, bind=engine)
-        logger.info("Database tables checked/created successfully")
+        logger.info("Connecting to database and running migrations...")
+        # Run alembic upgrade head programmatically
+        from alembic.config import Config
+        from alembic import command
+        
+        def run_migrations():
+            alembic_cfg = Config("alembic.ini")
+            command.upgrade(alembic_cfg, "head")
+            # Also fallback to create_all just in case
+            Base.metadata.create_all(bind=engine)
+            
+        await asyncio.to_thread(run_migrations)
+        logger.info("Database migrations and table creation completed successfully")
     except Exception as e:
         logger.error(f"Error during database initialization: {e}")
         # We don't raise here so the app can still bind to the port and respond to health checks
