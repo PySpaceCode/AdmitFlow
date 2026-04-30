@@ -33,12 +33,17 @@ class ResponseWrapperMiddleware(BaseHTTPMiddleware):
         async for chunk in response.body_iterator:
             response_body += chunk
 
+        # Pre-clean headers (always remove content-length when we're returning a new JSONResponse)
+        new_headers = dict(response.headers)
+        if "content-length" in new_headers:
+            del new_headers["content-length"]
+
         try:
             data = json.loads(response_body)
             
             # If already FULLY wrapped with success key, just return as is
             if isinstance(data, dict) and "success" in data:
-                return JSONResponse(content=data, status_code=response.status_code, headers=dict(response.headers))
+                return JSONResponse(content=data, status_code=response.status_code, headers=new_headers)
             
             # Success logic
             is_success = response.status_code < 400
@@ -55,17 +60,9 @@ class ResponseWrapperMiddleware(BaseHTTPMiddleware):
                 if request.method == "POST" and status_code == 200:
                     status_code = 201
                 
-                new_headers = dict(response.headers)
-                if "content-length" in new_headers:
-                    del new_headers["content-length"]
-                    
                 return JSONResponse(content=wrapped_data, status_code=status_code, headers=new_headers)
             else:
                 # If it's an error but NOT wrapped (e.g. from FastAPI defaults)
-                new_headers = dict(response.headers)
-                if "content-length" in new_headers:
-                    del new_headers["content-length"]
-                    
                 return JSONResponse(
                     status_code=response.status_code,
                     content={
@@ -93,6 +90,6 @@ class ResponseWrapperMiddleware(BaseHTTPMiddleware):
                     } if response.status_code >= 400 else None
                 },
                 status_code=response.status_code,
-                headers=dict(response.headers)
+                headers=new_headers
             )
         
