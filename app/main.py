@@ -44,11 +44,11 @@ app.add_middleware(ResponseWrapperMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",  # local frontend
+        "http://localhost:3000",   # local dev
         "http://127.0.0.1:3000",
-        "https://admiflow-frontend-rv2z.vercel.app",  # deployed frontend
-        "https://admitflow-frontend-rv2z.vercel.app",  # alternate spelling
     ],
+    # Allow ALL Vercel preview + production URLs permanently
+    allow_origin_regex=r"https?://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -77,13 +77,21 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     logger.error(f"Validation Error: {exc}")
-
+    
+    # Extract readable error messages
+    details = []
+    for error in exc.errors():
+        loc = ".".join(str(l) for l in error.get("loc", []))
+        msg = error.get("msg", "Unknown error")
+        details.append(f"{loc}: {msg}")
+    
     return JSONResponse(
         status_code=422,
         content={
             "success": False,
-            "message": "Invalid input data",
-            "data": None
+            "message": "Validation failed",
+            "data": None,
+            "details": details
         }
     )
 

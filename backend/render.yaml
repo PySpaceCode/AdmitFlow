@@ -3,13 +3,13 @@ services:
     name: admission-ai-backend
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.1 --port $PORT
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: DATABASE_URL
         fromDatabase:
           name: admission-db
           property: connectionString
-      - key: JWT_SECRET
+      - key: SECRET_KEY
         generateValue: true
       - key: JWT_REFRESH_SECRET
         generateValue: true
