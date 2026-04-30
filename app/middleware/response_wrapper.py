@@ -2,7 +2,10 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 import json
+import logging
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 class ResponseWrapperMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -24,9 +27,9 @@ class ResponseWrapperMiddleware(BaseHTTPMiddleware):
                 }
             )
         
-        # Paths that are NEVER wrapped (docs, openapi, etc.)
-        exclude_paths = ["/api/openapi.json", "/docs", "/redoc"]
-        if request.url.path in exclude_paths or not request.url.path.startswith("/api"):
+        # Paths that are NEVER wrapped (docs, openapi, static files, root)
+        exclude_paths = ["/openapi.json", "/docs", "/redoc", "/", "/static"]
+        if any(request.url.path.startswith(p) for p in exclude_paths):
             return response
 
         # Only wrap JSON responses and skip empty/streaming responses
