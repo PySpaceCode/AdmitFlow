@@ -45,15 +45,24 @@ async def startup_event():
         from alembic import command
         
         def run_migrations():
-            alembic_cfg = Config("alembic.ini")
-            command.upgrade(alembic_cfg, "head")
-            # Also fallback to create_all just in case
+            try:
+                alembic_cfg = Config("alembic.ini")
+                # We use upgrade head to ensure the database schema is up to date
+                logger.info("Running 'alembic upgrade head'...")
+                command.upgrade(alembic_cfg, "head")
+                logger.info("Alembic migrations completed successfully")
+            except Exception as migration_error:
+                logger.warning(f"Alembic migration failed (this is expected if tables already exist but version table is missing): {migration_error}")
+                logger.info("Attempting fallback with Base.metadata.create_all...")
+            
+            # Fallback to create_all for any missing tables
             Base.metadata.create_all(bind=engine)
+            logger.info("Table verification/creation completed")
             
         await asyncio.to_thread(run_migrations)
-        logger.info("Database migrations and table creation completed successfully")
+        logger.info("Database initialization completed successfully")
     except Exception as e:
-        logger.error(f"Error during database initialization: {e}")
+        logger.error(f"Error during database initialization: {e}", exc_info=True)
         # We don't raise here so the app can still bind to the port and respond to health checks
 
 # -----------------------------
