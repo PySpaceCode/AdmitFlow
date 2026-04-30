@@ -33,10 +33,9 @@ class ResponseWrapperMiddleware(BaseHTTPMiddleware):
         async for chunk in response.body_iterator:
             response_body += chunk
 
-        # Pre-clean headers (always remove content-length when we're returning a new JSONResponse)
-        new_headers = dict(response.headers)
-        if "content-length" in new_headers:
-            del new_headers["content-length"]
+        # Pre-clean headers (remove content-length and content-type so JSONResponse can set them correctly)
+        new_headers = {k: v for k, v in response.headers.items() 
+                       if k.lower() not in ["content-length", "content-type"]}
 
         try:
             data = json.loads(response_body)
