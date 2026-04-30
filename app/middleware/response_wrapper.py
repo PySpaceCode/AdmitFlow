@@ -6,6 +6,11 @@ from app.core.config import settings
 
 class ResponseWrapperMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+        # Always pass through OPTIONS preflight requests untouched
+        # so CORSMiddleware can handle them without interference
+        if request.method == "OPTIONS":
+            return await call_next(request)
+
         try:
             response = await call_next(request)
         except Exception as e:
@@ -33,9 +38,19 @@ class ResponseWrapperMiddleware(BaseHTTPMiddleware):
         async for chunk in response.body_iterator:
             response_body += chunk
 
-        # Pre-clean headers (remove content-length and content-type so JSONResponse can set them correctly)
+        # Pre-clean headers (remove body-specific and hop-by-hop headers)
+        # JSONResponse will set its own Content-Length and Content-Type
+        exclude_headers = {
+            "content-length", "content-type", "transfer-encoding", 
+            "connection", "keep-alive", "proxy-authenticate", 
+            "proxy-authorization", "te", "trailers", "upgrade"
+        }
         new_headers = {k: v for k, v in response.headers.items() 
-                       if k.lower() not in ["content-length", "content-type"]}
+                       if k.lower() not in exclude_headers}
+
+        # Safety check: if no body, don't try to parse JSON
+        if not response_body:
+            return response
 
         try:
             data = json.loads(response_body)

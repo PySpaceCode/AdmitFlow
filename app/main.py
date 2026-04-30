@@ -32,7 +32,14 @@ app = FastAPI(
 )
 
 # -----------------------------
-# CORS (VERY IMPORTANT)
+# Custom Middleware
+# (added first = executes LAST in Starlette's LIFO chain)
+# -----------------------------
+app.add_middleware(ResponseWrapperMiddleware)
+
+# -----------------------------
+# CORS (added LAST = executes FIRST, so it always runs before
+# ResponseWrapperMiddleware and handles OPTIONS preflight correctly)
 # -----------------------------
 app.add_middleware(
     CORSMiddleware,
@@ -40,16 +47,13 @@ app.add_middleware(
         "http://localhost:3000",  # local frontend
         "http://127.0.0.1:3000",
         "https://admiflow-frontend-rv2z.vercel.app",  # deployed frontend
+        "https://admitflow-frontend-rv2z.vercel.app",  # alternate spelling
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
-
-# -----------------------------
-# Custom Middleware
-# -----------------------------
-app.add_middleware(ResponseWrapperMiddleware)
 
 # -----------------------------
 # Exception Handlers
