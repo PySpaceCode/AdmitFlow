@@ -17,13 +17,15 @@ class ResponseWrapperMiddleware(BaseHTTPMiddleware):
         try:
             response = await call_next(request)
         except Exception as e:
-            logger.error(f"Error in ResponseWrapperMiddleware: {e}", exc_info=True)
+            import traceback
+            tb = traceback.format_exc()
+            logger.error(f"Error in ResponseWrapperMiddleware: {e}\n{tb}")
             return JSONResponse(
                 status_code=500,
                 content={
                     "success": False,
                     "message": "Internal server error during response processing",
-                    "data": None
+                    "data": {"error": str(e), "traceback": tb}
                 }
             )
         
