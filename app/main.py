@@ -148,24 +148,20 @@ os.makedirs("uploads/knowledge", exist_ok=True)
 app.mount("/static", StaticFiles(directory="uploads"), name="static")
 
 # -----------------------------
-# Routers
 # -----------------------------
-from app.api.routers import auth, onboarding, leads, knowledge_base, dev
+# Clean & Consistent API Prefixes
+# -----------------------------
+from app.api.routers import auth, onboarding, leads, communication, bookings, settings, knowledge_base, dev
 
-# -----------------------------
-# Clean & Simple Route Prefixes
-# (No /api prefix — easy to test on Render, easy to call from Vercel)
-# -----------------------------
-# Auth:         POST /register | POST /login | POST /logout
-# Onboarding:   GET /onboarding/status | POST /onboarding/setup
-# Leads:        GET /leads | POST /leads/upload | POST /leads/calling-config
-# Knowledge:    GET /knowledge/documents | POST /knowledge/upload | POST /knowledge/persona | POST /knowledge/script
-# Dev (seed):   POST /dev/seed
-app.include_router(auth.router,           prefix="",             tags=["🔐 Auth"])
-app.include_router(onboarding.router,     prefix="/onboarding",  tags=["🏫 Onboarding"])
-app.include_router(leads.router,          prefix="/leads",       tags=["👥 Leads"])
-app.include_router(knowledge_base.router, prefix="/knowledge",   tags=["📚 Knowledge Base"])
-app.include_router(dev.router,            prefix="/dev",         tags=["🛠 Dev / Seeding"])
+app.include_router(auth.router,           prefix="/api",             tags=["🔐 Auth"])
+app.include_router(onboarding.router,     prefix="/api/onboarding",  tags=["🏫 Onboarding"])
+app.include_router(leads.router,          prefix="/api/leads",       tags=["👥 Leads"])
+app.include_router(communication.router,  prefix="/api/comm",        tags=["📞 Communication"])
+app.include_router(bookings.router,       prefix="/api/bookings",    tags=["📅 Bookings"])
+app.include_router(settings.router,       prefix="/api/settings",    tags=["⚙ Settings"])
+app.include_router(knowledge_base.router, prefix="/api/knowledge",   tags=["📚 Knowledge Base"])
+app.include_router(dev.router,            prefix="/api/dev",         tags=["🛠 Dev / Seeding"])
+
 
 # -----------------------------
 # Root Endpoint
