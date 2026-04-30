@@ -151,16 +151,21 @@ app.mount("/static", StaticFiles(directory="uploads"), name="static")
 # -----------------------------
 # Clean & Consistent API Prefixes
 # -----------------------------
-from app.api.routers import auth, onboarding, leads, communication, bookings, settings, knowledge_base, dev
+from app.api.routers import (
+    auth, onboarding, leads, communication, 
+    bookings, settings as settings_router, 
+    knowledge_base, dev
+)
 
 app.include_router(auth.router,           prefix="/api",             tags=["🔐 Auth"])
 app.include_router(onboarding.router,     prefix="/api/onboarding",  tags=["🏫 Onboarding"])
 app.include_router(leads.router,          prefix="/api/leads",       tags=["👥 Leads"])
 app.include_router(communication.router,  prefix="/api/comm",        tags=["📞 Communication"])
 app.include_router(bookings.router,       prefix="/api/bookings",    tags=["📅 Bookings"])
-app.include_router(settings.router,       prefix="/api/settings",    tags=["⚙ Settings"])
+app.include_router(settings_router.router, prefix="/api/settings",    tags=["⚙ Settings"])
 app.include_router(knowledge_base.router, prefix="/api/knowledge",   tags=["📚 Knowledge Base"])
 app.include_router(dev.router,            prefix="/api/dev",         tags=["🛠 Dev / Seeding"])
+
 
 
 # -----------------------------
