@@ -36,22 +36,58 @@ async def upload_document(
     except Exception as e:
         raise HTTPException(status_code=500, detail="Could not save file")
     
-    # Mock extraction for PDF/DOCX brochure
+    # Strict JSON Extraction Structure as requested
     mock_extracted_data = {
-        "courses": ["Python Programming", "Data Science", "Machine Learning"],
-        "courses_subtopics": {
-            "Python Programming": ["Introduction", "Data Structures", "Pandas and Numpy"],
-            "Data Science": ["Statistics", "Visualization", "Machine Learning"]
+      "institute_name": "AdmissionFlow Academy",
+      "institute_tagline": "Empowering Future Leaders",
+      "contact": {
+        "phone": "+91 9876543210",
+        "email": "info@admissionflow.com",
+        "website": "www.admissionflow.com",
+        "address": "123 Education Hub, New Delhi",
+        "branches": ["Delhi", "Mumbai", "Bangalore"]
+      },
+      "courses": [
+        {
+          "course_name": "Advanced AI & Machine Learning",
+          "course_code": "AIML-001",
+          "eligibility": "B.Tech/BCA/Any Graduate",
+          "duration": "6 Months",
+          "total_hours": "120 Hours",
+          "fee": "75,000",
+          "fee_note": "+ GST extra",
+          "mode": "Online / Offline",
+          "coordinator": "Dr. Vikas Tiwari",
+          "partner_institute": "TechGlobal University"
+        }
+      ],
+      "modules": [
+        {
+          "module_number": 1,
+          "module_title": "Python for Data Science",
+          "topics": ["Variables", "Loops", "Pandas", "NumPy", "Matplotlib"]
         },
-        "pricing_details": {
-            "Python Programming": "7000 (+ GST)",
-            "Data Science": "15000 (+ GST)"
-        },
-        "faqs": [
-            {"question": "What is the duration?", "answer": "10 hours"},
-            {"question": "Is it online or offline?", "answer": "Both"}
-        ],
-        "other_details": "Mentorship and placement support included."
+        {
+          "module_number": 2,
+          "module_title": "Deep Learning Fundamentals",
+          "topics": ["Neural Networks", "TensorFlow", "Keras", "CNN", "RNN"]
+        }
+      ],
+      "learning_outcomes": ["Build real-world AI models", "Deploy ML apps", "Master Data Visualization"],
+      "tools_technologies": ["Python", "PyTorch", "TensorFlow", "Azure AI"],
+      "industry_scope": ["BFSI", "Healthcare", "E-commerce", "FinTech"],
+      "job_roles": ["Data Scientist", "ML Engineer", "AI Researcher"],
+      "partners": ["Google Cloud", "NVIDIA", "AWS"],
+      "accreditation": "ISO 9001:2015 Certified",
+      "naac_grade": "A+",
+      "placement_support": "100% Placement Assistance with 500+ Hiring Partners",
+      "faqs": [
+        {
+          "question": "Is there a weekend batch?",
+          "answer": "Yes, we have specialized weekend batches for working professionals."
+        }
+      ],
+      "other_highlights": ["Live Projects", "LMS Access", "Resume Building Workshop"]
     }
 
     import json
