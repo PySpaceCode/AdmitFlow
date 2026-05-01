@@ -125,25 +125,43 @@ def configure_calling(
     db: Session = Depends(deps.get_db),
     institute_id: int = Depends(deps.get_current_institute_id)
 ):
-    new_campaign = Campaign(
-        institute_id=institute_id,
-        calling_days=config_data.calling_days,
-        time_start=config_data.calling_window_start,
-        time_end=config_data.calling_window_end,
-        max_attempts=config_data.maximum_daily_call_attempts,
-        fallback_name=config_data.human_agent_name,
-        fallback_phone=config_data.human_agent_phone_number,
-        status="active"
-    )
-    db.add(new_campaign)
+    # Check if a campaign already exists for this institute
+    existing_campaign = db.query(Campaign).filter(Campaign.institute_id == institute_id).first()
+    
+    if existing_campaign:
+        # Update existing campaign
+        existing_campaign.calling_days = config_data.calling_days
+        existing_campaign.time_start = config_data.calling_window_start
+        existing_campaign.time_end = config_data.calling_window_end
+        existing_campaign.max_attempts = config_data.maximum_daily_call_attempts
+        existing_campaign.fallback_name = config_data.human_agent_name
+        existing_campaign.fallback_phone = config_data.human_agent_phone_number
+        existing_campaign.status = "active"
+        db.add(existing_campaign)
+        campaign = existing_campaign
+    else:
+        # Create new campaign
+        new_campaign = Campaign(
+            institute_id=institute_id,
+            calling_days=config_data.calling_days,
+            time_start=config_data.calling_window_start,
+            time_end=config_data.calling_window_end,
+            max_attempts=config_data.maximum_daily_call_attempts,
+            fallback_name=config_data.human_agent_name,
+            fallback_phone=config_data.human_agent_phone_number,
+            status="active"
+        )
+        db.add(new_campaign)
+        campaign = new_campaign
+        
     db.commit()
-    db.refresh(new_campaign)
+    db.refresh(campaign)
     
     return {
         "success": True,
         "message": "Calling configuration saved",
         "data": {
-            "campaignId": new_campaign.id,
-            "status": new_campaign.status
+            "campaignId": campaign.id,
+            "status": campaign.status
         }
     }
