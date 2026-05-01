@@ -77,12 +77,16 @@ async def upload_leads_file(
             skipped_leads += 1
             continue
         
+        # Support common column variations
+        name_val = row.get('name') or row.get('student name') or row.get('full name') or 'Unknown'
+        course_val = row.get('course') or row.get('course interest') or row.get('subject') or ''
+        
         new_lead = Lead(
             institute_id=institute_id,
-            name=str(row.get('name', 'Unknown')).strip(),
+            name=str(name_val).strip(),
             phone=phone,
             email=str(row.get('email', '')).strip() if pd.notna(row.get('email')) else None,
-            course=str(row.get('course', '')).strip() if pd.notna(row.get('course')) else None,
+            course=str(course_val).strip() if course_val else None,
             status="Pending"
         )
         db.add(new_lead)
