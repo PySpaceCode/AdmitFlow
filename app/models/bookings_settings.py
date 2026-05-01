@@ -12,6 +12,7 @@ class Booking(Base):
     lead_id = Column(Integer, ForeignKey("leads.id", ondelete="CASCADE"), nullable=False, index=True)
     status = Column(String, default="confirmed") # pending, confirmed, cancelled
     agent_assigned_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    scheduled_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

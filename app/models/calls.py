@@ -10,6 +10,7 @@ class Call(Base):
     id = Column(Integer, primary_key=True, index=True)
     institute_id = Column(Integer, ForeignKey("institutes.id", ondelete="CASCADE"), nullable=False, index=True)
     lead_id = Column(Integer, ForeignKey("leads.id", ondelete="SET NULL"), nullable=True, index=True)
+    status = Column(String, default="completed") # completed, failed, no_answer, busy
     sentiment = Column(String, nullable=True)    # positive, neutral, negative
     duration = Column(Integer, nullable=True)     # in seconds
     summary = Column(Text, nullable=True)

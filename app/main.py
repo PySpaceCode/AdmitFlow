@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 import os
 from app.core.config import settings
 from app.middleware.response_wrapper import ResponseWrapperMiddleware
-from app.api.routers import auth, onboarding, knowledge_base, leads, communication, bookings, settings as settings_router, dev
+from app.api.routers import auth, onboarding, knowledge_base, leads, communication, bookings, settings as settings_router, dev, dashboard
 from app.db.session import engine, Base
 
 # Create tables on startup (In production use Almebic)
@@ -79,6 +79,7 @@ app.include_router(leads.router, prefix=f"{settings.API_V1_STR}/leads", tags=["l
 app.include_router(communication.router, prefix=f"{settings.API_V1_STR}/communication", tags=["communication"])
 app.include_router(bookings.router, prefix=f"{settings.API_V1_STR}/bookings", tags=["bookings"])
 app.include_router(settings_router.router, prefix=f"{settings.API_V1_STR}/settings", tags=["settings"])
+app.include_router(dashboard.router, prefix=f"{settings.API_V1_STR}/dashboard", tags=["dashboard"])
 app.include_router(dev.router, prefix=f"{settings.API_V1_STR}/dev", tags=["dev"])
 
 @app.get("/")

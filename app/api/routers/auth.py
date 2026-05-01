@@ -107,3 +107,17 @@ def logout(
         "message": "Logout successful",
         "data": {}
     }
+
+@router.get("/users")
+def get_users(
+    db: Session = Depends(deps.get_db),
+    institute_id: int = Depends(deps.get_current_institute_id)
+):
+    users = db.query(User).filter(User.institute_id == institute_id).all()
+    return {
+        "success": True,
+        "data": [
+            {"id": u.id, "name": u.full_name or u.username or u.email, "role": u.role}
+            for u in users
+        ]
+    }

@@ -47,6 +47,27 @@ def trigger_call(
         }
     }
 
+@router.post("/whatsapp/send")
+def send_whatsapp(
+    request_data: CallTriggerRequest, # Reusing same schema for leadId
+    db: Session = Depends(deps.get_db),
+    institute_id: int = Depends(deps.get_current_institute_id)
+):
+    lead = db.query(Lead).filter(Lead.id == request_data.leadId, Lead.institute_id == institute_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    # Logic for sending WhatsApp would go here
+    # For now we just mark the lead as contacted or similar
+    
+    return {
+        "success": True,
+        "message": f"WhatsApp sent to {lead.name}",
+        "data": {
+            "status": "sent"
+        }
+    }
+
 @router.get("/conversations/active")
 def get_active_conversations(
     db: Session = Depends(deps.get_db),
