@@ -52,9 +52,12 @@ def setup_institute(
         institute.social_x = setup_data.socialMediaLinks.x
 
     institute.onboarding_status = True
-    # Also update user info as per setup request
-    current_user.full_name = setup_data.fullName
-    current_user.email = setup_data.email
+    
+    # Only update if changed
+    if setup_data.fullName != current_user.full_name:
+        current_user.full_name = setup_data.fullName
+    if setup_data.email != current_user.email:
+        current_user.email = setup_data.email
     
     db.add(institute)
     db.add(current_user)
