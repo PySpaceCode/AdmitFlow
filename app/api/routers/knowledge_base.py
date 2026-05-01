@@ -36,7 +36,7 @@ async def upload_document(
     except Exception as e:
         raise HTTPException(status_code=500, detail="Could not save file")
     
-    # Strict JSON Extraction Structure as requested
+    # Strict JSON Extraction Structure for 10+ Modules & High Conversion
     mock_extracted_data = {
       "institute_name": "AdmissionFlow Academy",
       "institute_tagline": "Empowering Future Leaders",
@@ -45,49 +45,58 @@ async def upload_document(
         "email": "info@admissionflow.com",
         "website": "www.admissionflow.com",
         "address": "123 Education Hub, New Delhi",
-        "branches": ["Delhi", "Mumbai", "Bangalore"]
+        "branches": ["Delhi", "Mumbai", "Bangalore", "Hyderabad", "Pune"]
       },
       "courses": [
         {
-          "course_name": "Advanced AI & Machine Learning",
-          "course_code": "AIML-001",
-          "eligibility": "B.Tech/BCA/Any Graduate",
-          "duration": "6 Months",
-          "total_hours": "120 Hours",
-          "fee": "75,000",
-          "fee_note": "+ GST extra",
-          "mode": "Online / Offline",
+          "course_name": "Full Stack Data Science & AI Mastery",
+          "course_code": "DS-AI-2024",
+          "eligibility": "B.Tech / BCA / BSc IT / Any Graduate with Math",
+          "duration": "12 Months",
+          "total_hours": "400+ Hours",
+          "fee": "1,25,000",
+          "fee_note": "Early bird discount of 10% available. EMI starts at ₹8,500/month.",
+          "mode": "Hybrid (Live Online + In-person Workshops)",
           "coordinator": "Dr. Vikas Tiwari",
-          "partner_institute": "TechGlobal University"
+          "partner_institute": "Global Tech University"
         }
       ],
       "modules": [
-        {
-          "module_number": 1,
-          "module_title": "Python for Data Science",
-          "topics": ["Variables", "Loops", "Pandas", "NumPy", "Matplotlib"]
-        },
-        {
-          "module_number": 2,
-          "module_title": "Deep Learning Fundamentals",
-          "topics": ["Neural Networks", "TensorFlow", "Keras", "CNN", "RNN"]
-        }
+        {"module_number": 1, "module_title": "Python for Data Science", "topics": ["Variables", "Loops", "Pandas", "NumPy", "Matplotlib", "Seaborn"]},
+        {"module_number": 2, "module_title": "Mathematical Foundations", "topics": ["Linear Algebra", "Calculus", "Probability", "Statistics", "Hypothesis Testing"]},
+        {"module_number": 3, "module_title": "Machine Learning - Supervised", "topics": ["Linear Regression", "Logistic Regression", "Decision Trees", "Random Forest", "SVM"]},
+        {"module_number": 4, "module_title": "Machine Learning - Unsupervised", "topics": ["K-Means Clustering", "PCA", "Hierarchical Clustering", "Association Rules"]},
+        {"module_number": 5, "module_number": 5, "module_title": "Deep Learning Fundamentals", "topics": ["Artificial Neural Networks", "Backpropagation", "Optimizers", "Activation Functions"]},
+        {"module_number": 6, "module_title": "Computer Vision (CV)", "topics": ["CNN Architecture", "Object Detection", "YOLO", "Image Segmentation", "OpenCV"]},
+        {"module_number": 7, "module_title": "Natural Language Processing (NLP)", "topics": ["Tokenization", "BERT", "Transformers", "Sentiment Analysis", "NLTK"]},
+        {"module_number": 8, "module_title": "Generative AI & LLMs", "topics": ["Prompt Engineering", "RAG Pipeline", "Fine-tuning Models", "LangChain", "Vector Databases"]},
+        {"module_number": 9, "module_title": "Data Engineering & Cloud", "topics": ["AWS S3", "Docker", "Kubernetes", "Flask API", "MLOps Pipelines"]},
+        {"module_number": 10, "module_title": "Capstone Projects & Portfolio", "topics": ["Real-time Fraud Detection", "Healthcare AI", "Sales Prediction", "GitHub Portfolio"]}
       ],
-      "learning_outcomes": ["Build real-world AI models", "Deploy ML apps", "Master Data Visualization"],
-      "tools_technologies": ["Python", "PyTorch", "TensorFlow", "Azure AI"],
-      "industry_scope": ["BFSI", "Healthcare", "E-commerce", "FinTech"],
-      "job_roles": ["Data Scientist", "ML Engineer", "AI Researcher"],
-      "partners": ["Google Cloud", "NVIDIA", "AWS"],
+      "learning_outcomes": [
+        "Master end-to-end ML & AI development",
+        "Deploy production-grade AI models on Cloud",
+        "Create a professional GitHub portfolio with 5+ live projects",
+        "Expertise in Generative AI and LLM integration"
+      ],
+      "tools_technologies": ["Python", "PyTorch", "TensorFlow", "Azure AI", "AWS", "Docker", "Kubernetes", "LangChain", "OpenAI API"],
+      "industry_scope": ["BFSI", "Healthcare", "E-commerce", "FinTech", "Supply Chain", "Automotive"],
+      "job_roles": ["Data Scientist", "ML Engineer", "AI Researcher", "Data Engineer", "LLM Developer"],
+      "partners": ["Google Cloud", "NVIDIA", "AWS", "Microsoft", "Meta"],
       "accreditation": "ISO 9001:2015 Certified",
       "naac_grade": "A+",
-      "placement_support": "100% Placement Assistance with 500+ Hiring Partners",
+      "placement_support": "100% Placement Assistance with 500+ Global Hiring Partners",
       "faqs": [
         {
           "question": "Is there a weekend batch?",
           "answer": "Yes, we have specialized weekend batches for working professionals."
+        },
+        {
+          "question": "Do I need a coding background?",
+          "answer": "While helpful, we start from scratch with Python to ensure everyone can follow along."
         }
       ],
-      "other_highlights": ["Live Projects", "LMS Access", "Resume Building Workshop"]
+      "other_highlights": ["Live Projects", "LMS Access", "Resume Building Workshop", "Mock Interviews", "Lifetime Access to Alumni Network"]
     }
 
     import json
