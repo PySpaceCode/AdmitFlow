@@ -4,7 +4,7 @@ from .base import BaseSchema
 
 class KnowledgeBaseDocumentResponse(BaseSchema):
     id: int
-    fileName: str
+    file_name: str
     status: str
     created_at: datetime
 

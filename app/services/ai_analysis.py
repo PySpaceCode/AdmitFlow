@@ -11,7 +11,7 @@ class AIAnalysisService:
         self.gemini_key = settings.GEMINI_API_KEY
         if self.gemini_key:
             genai.configure(api_key=self.gemini_key)
-            self.model = genai.GenerativeModel('gemini-1.5-flash')
+            self.model = genai.GenerativeModel('gemini-flash-latest')
         else:
             self.model = None
 
@@ -65,18 +65,18 @@ CRITICAL CONSTRAINTS (MANDATORY):
 
 REQUIRED JSON STRUCTURE (Use `null` for missing values):
 {{
-  "institute_name": "string or null",
+  "institute_name": "string (MANDATORY: Look for headers, logos, footer text)",
   "institute_tagline": "string or null",
   "contact": {{
-    "phone": "string or null",
-    "email": "string or null",
+    "phone": "string or null (Extract ALL phone numbers found)",
+    "email": "string or null (Extract ALL emails found)",
     "website": "string or null",
     "address": "string or null",
     "branches": ["string"]
   }},
   "courses": [
     {{
-      "course_name": "string or null",
+      "course_name": "string",
       "course_code": "string or null",
       "eligibility": "string or null",
       "duration": "string or null",
@@ -148,15 +148,31 @@ REQUIRED JSON STRUCTURE (Use `null` for missing values):
 
             if not response.text:
                 raise ValueError("Gemini returned an empty response.")
-                
-            data = json.loads(response.text)
             
-            # Post-processing to clean up "fake" names
-            forbidden_names = ["admitflow", "admissionflow", "admissions ai", "admit flow"]
-            name = data.get("institute_name", "")
-            if name and any(f in name.lower() for f in forbidden_names):
-                data["institute_name"] = "Unknown Institute"
+            # Clean up potential markdown formatting in response
+            clean_text = response.text.strip()
+            if clean_text.startswith("```json"):
+                clean_text = clean_text[7:-3].strip()
+            elif clean_text.startswith("```"):
+                clean_text = clean_text[3:-3].strip()
                 
+            data = json.loads(clean_text)
+            
+            # Post-processing to clean up "fake" names and ensure structure
+            forbidden_names = ["admitflow", "admissionflow", "admissions ai", "admit flow", "university system", "sample"]
+            name = data.get("institute_name", "")
+            if not name or any(f in name.lower() for f in forbidden_names):
+                # Try to find a better name if it failed
+                data["institute_name"] = "Document Under Analysis"
+                
+            # Ensure critical lists exist so frontend doesn't crash
+            for key in ["courses", "modules", "learning_outcomes", "tools_technologies", "faqs"]:
+                if key not in data or data[key] is None:
+                    data[key] = []
+            
+            if "contact" not in data or data["contact"] is None:
+                data["contact"] = {"phone": None, "email": None, "website": None, "address": None, "branches": []}
+
             return data
             
         except Exception as e:

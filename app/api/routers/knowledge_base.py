@@ -80,6 +80,12 @@ async def upload_document(
         db.commit()
         db.refresh(new_doc)
     
+    # Ensure we return a dictionary for aiReport, not a string
+    try:
+        report_data = json.loads(new_doc.ai_report) if isinstance(new_doc.ai_report, str) else new_doc.ai_report
+    except:
+        report_data = extracted_data
+
     return {
         "success": True,
         "message": "File uploaded and processed",
@@ -87,7 +93,7 @@ async def upload_document(
             "id": new_doc.id,
             "fileName": new_doc.file_name,
             "status": new_doc.status,
-            "aiReport": new_doc.ai_report,
+            "aiReport": report_data,
             "uploadedAt": new_doc.created_at.isoformat()
         }
     }
