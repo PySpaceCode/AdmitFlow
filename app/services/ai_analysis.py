@@ -44,93 +44,102 @@ class AIAnalysisService:
             raise ValueError("OpenAI API Key is not configured")
 
         raw_text = await self.extract_text_from_file(file_path)
+        print(f"DEBUG: Extracted text length: {len(raw_text)}")
         if not raw_text:
-            raise ValueError("Could not extract text from the document. The file might be empty or corrupted.")
+            print(f"DEBUG: Failed to extract text from {file_path}")
+            raise ValueError("Could not extract text from the document. The file might be empty, password-protected, or contains only images without OCR.")
+
+        # Limit text to 15k chars to fit context window and keep costs down
+        text_context = raw_text[:15000]
 
         prompt = f"""
-Analyze the following document text and extract ALL information into this exact JSON structure.
-You are an expert document analyst for the coaching and education industry.
+You are a highly accurate document analyst. Your task is to extract data from the provided BROCHURE TEXT.
 
-CRITICAL INSTRUCTIONS:
-1. INSTITUTE NAME: Extract the ACTUAL institute/company name from the brochure text. DO NOT use "AdmissionFlow", "AdmitFlow", or "Admissions AI" unless it is the name of the entity described in the document. If you cannot find the name, use null.
-2. SOURCE TRUTH: Only extract information present in the text. Never invent or guess details.
-3. MODULES: Extract EVERY module and EVERY topic. Do not summarize. If there are 10 modules, I expect all 10 in the JSON.
-4. CONTACT: Extract the specific contact details for the institute.
+TARGET DOCUMENT: {os.path.basename(file_path)}
 
-STRICT RULES:
-- Return ONLY valid JSON. No bullet points. No markdown. No extra text.
-- Extract every single detail — institute name, tagline, contact, courses, all modules with all topics, fees, eligibility, duration, tools, learning outcomes, partners, FAQs.
-- For modules: list EVERY topic under each module — do not skip or summarize.
-- If any field is not found in the document, set it to null.
+STRICT REQUIREMENTS:
+1. INSTITUTE NAME: Extract the name of the school/college/institute/company from the brochure. 
+   - CRITICAL: "AdmitFlow", "AdmissionFlow", "Admissions AI", or "Admission AI" are the PLATFORM names. 
+   - DO NOT use these as the institute_name unless the brochure is specifically about them.
+   - If the institute name is not clearly mentioned, set it to null.
+2. NO HALLUCINATION: If a piece of information (like fee, duration, phone) is not in the text, set it to null. Do not invent it.
+3. FULL EXTRACTION: List EVERY single module and topic found. If there are many, include all of them.
+4. VALID JSON: Return only a raw JSON object matching the schema below.
 
-TEXT TO ANALYZE:
-{raw_text[:15000]}
+BROCHURE TEXT:
+---
+{text_context}
+---
 
-EXPECTED JSON STRUCTURE:
+EXPECTED JSON SCHEMA:
 {{
-  "institute_name": null,
-  "institute_tagline": null,
+  "institute_name": "Exact name of the institute",
+  "institute_tagline": "Tagline if found",
   "contact": {{
-    "phone": null,
-    "email": null,
-    "website": null,
-    "address": null,
-    "branches": []
+    "phone": "string",
+    "email": "string",
+    "website": "string",
+    "address": "string",
+    "branches": ["branch1", "branch2"]
   }},
   "courses": [
     {{
-      "course_name": null,
-      "course_code": null,
-      "eligibility": null,
-      "duration": null,
-      "total_hours": null,
-      "fee": null,
-      "fee_note": null,
-      "mode": null,
-      "coordinator": null,
-      "partner_institute": null
+      "course_name": "string",
+      "course_code": "string",
+      "eligibility": "string",
+      "duration": "string",
+      "total_hours": "string",
+      "fee": "number or string",
+      "fee_note": "string",
+      "mode": "string",
+      "coordinator": "string",
+      "partner_institute": "string"
     }}
   ],
   "modules": [
     {{
       "module_number": 1,
-      "module_title": null,
-      "topics": []
+      "module_title": "string",
+      "topics": ["topic1", "topic2"]
     }}
   ],
-  "learning_outcomes": [],
-  "tools_technologies": [],
-  "industry_scope": [],
-  "job_roles": [],
-  "partners": [],
-  "accreditation": null,
-  "naac_grade": null,
-  "placement_support": null,
+  "learning_outcomes": ["outcome1"],
+  "tools_technologies": ["tool1"],
+  "industry_scope": ["scope1"],
+  "job_roles": ["role1"],
+  "partners": ["partner1"],
+  "accreditation": "string",
+  "naac_grade": "string",
+  "placement_support": "string",
   "faqs": [
     {{
-      "question": null,
-      "answer": null
+      "question": "string",
+      "answer": "string"
     }}
   ],
-  "other_highlights": []
+  "other_highlights": ["highlight1"]
 }}
 """
 
         try:
+            print(f"DEBUG: Sending request to OpenAI for {file_path}...")
             response = await self.client.chat.completions.create(
-                model="gpt-4o",  # Use gpt-4o for best extraction quality
+                model="gpt-4o",
                 messages=[
-                    {"role": "system", "content": "You are a specialized AI for educational document analysis. Your output must be strictly valid JSON."},
+                    {"role": "system", "content": "You are a professional educational data extractor. Output ONLY raw JSON."},
                     {"role": "user", "content": prompt}
                 ],
-                response_format={"type": "json_object"}
+                response_format={"type": "json_object"},
+                temperature=0
             )
             
             content = response.choices[0].message.content
+            print("DEBUG: OpenAI Response received successfully.")
             return json.loads(content)
         except Exception as e:
-            print(f"OpenAI Analysis Error: {e}")
+            print(f"DEBUG: OpenAI/Parsing Error: {str(e)}")
             raise ValueError(f"AI Analysis failed: {str(e)}")
+
 
     async def generate_pitch_script(self, context: str) -> dict:
         """

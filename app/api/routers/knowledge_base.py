@@ -41,10 +41,11 @@ async def upload_document(
         extracted_data = await ai_analysis_service.analyze_document(file_path)
     except Exception as e:
         # Fallback to a minimal structure if AI fails but don't use fake data
+        print(f"CRITICAL ERROR: Knowledge extraction failed for {file.filename}: {str(e)}")
         extracted_data = {
-            "institute_name": file.filename,
-            "status": "partial_extraction_error",
-            "error": str(e)
+            "institute_name": None,
+            "status": "error",
+            "error_detail": str(e)
         }
     
     import json
