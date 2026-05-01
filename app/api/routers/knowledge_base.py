@@ -1,8 +1,9 @@
 import os
 import shutil
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+import json
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status, Body
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Dict, Any
 from app.api import deps
 from app.models.knowledge import KnowledgeBaseDocument, Persona
 from app.models.script import Script
@@ -51,6 +52,10 @@ async def upload_document(
             "modules": [],
             "learning_outcomes": [],
             "tools_technologies": [],
+            "industry_scope": [],
+            "job_roles": [],
+            "partners": [],
+            "highlights": [],
             "faqs": [],
             "error_detail": str(e)
         }
@@ -96,6 +101,30 @@ async def upload_document(
             "aiReport": report_data,
             "uploadedAt": new_doc.created_at.isoformat()
         }
+    }
+
+@router.patch("/documents/{document_id}", summary="Update a document's AI report manually")
+async def update_document_report(
+    document_id: int,
+    report_update: Dict[str, Any] = Body(...),
+    db: Session = Depends(deps.get_db),
+    institute_id: int = Depends(deps.get_current_institute_id)
+):
+    doc = db.query(KnowledgeBaseDocument).filter(
+        KnowledgeBaseDocument.id == document_id,
+        KnowledgeBaseDocument.institute_id == institute_id
+    ).first()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+        
+    doc.ai_report = json.dumps(report_update)
+    db.commit()
+    
+    return {
+        "success": True, 
+        "message": "Neural data synced successfully",
+        "data": report_update
     }
 
 @router.post("/persona", summary="Save or update the AI agent persona")

@@ -6,6 +6,7 @@ class KnowledgeBaseDocumentResponse(BaseSchema):
     id: int
     file_name: str
     status: str
+    ai_report: Optional[str] = None
     created_at: datetime
 
 class PersonaSchema(BaseSchema):
