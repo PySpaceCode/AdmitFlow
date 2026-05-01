@@ -40,11 +40,18 @@ async def upload_document(
         from app.services.ai_analysis import ai_analysis_service
         extracted_data = await ai_analysis_service.analyze_document(file_path)
     except Exception as e:
-        # Fallback to a minimal structure if AI fails but don't use fake data
         print(f"CRITICAL ERROR: Knowledge extraction failed for {file.filename}: {str(e)}")
+        # Provide a complete empty structure so the frontend doesn't show "not found" for everything
         extracted_data = {
-            "institute_name": None,
+            "institute_name": "Analysis Failed",
+            "institute_tagline": str(e),
             "status": "error",
+            "contact": {"phone": None, "email": None, "website": None, "address": None, "branches": []},
+            "courses": [],
+            "modules": [],
+            "learning_outcomes": [],
+            "tools_technologies": [],
+            "faqs": [],
             "error_detail": str(e)
         }
     

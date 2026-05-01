@@ -42,41 +42,26 @@ class AIAnalysisService:
 
     async def analyze_document(self, file_path: str) -> dict:
         """
-        Analyzes the document using Google Gemini (Free Tier Alternative).
+        Analyzes the document using Google Gemini with native PDF/multimodal support.
         """
         if not self.model:
-            raise ValueError("Gemini API Key is not configured. Please get a free key from https://aistudio.google.com/")
+            raise ValueError("Gemini API Key is not configured. Please get a key from https://aistudio.google.com/")
 
-        raw_text = await self.extract_text_from_file(file_path)
-        print(f"DEBUG: Extracted text length: {len(raw_text)}")
+        extension = os.path.splitext(file_path)[1].lower()
         
-        if not raw_text:
-            raise ValueError("Could not extract text from the document.")
-
-        text_context = raw_text[:30000] # Gemini has larger context, but we stay safe
-
+        # Prepare the prompt
         prompt = f"""
-You are a highly precise document analyst. Your mission is to extract structured data from the provided BROCHURE TEXT.
-
-TARGET DOCUMENT: {os.path.basename(file_path)}
+You are a highly precise document analyst. Your mission is to extract structured data from the provided document.
 
 CRITICAL CONSTRAINTS (MANDATORY):
-1. **INSTITUTE IDENTITY**: Identify the REAL organization the brochure is about.
-   - **DO NOT** use "AdmitFlow", "AdmissionFlow", "Admissions AI", or "AdmitFlow AI". These are the SOFTWARE PLATFORMS, not the school/company.
-   - Look for headers, footers, or the "About Us" section to find the true institute name.
+1. **INSTITUTE IDENTITY**: Identify the REAL organization the document is about.
+   - **DO NOT** use "AdmitFlow", "AdmissionFlow", "Admissions AI", or "AdmitFlow AI". These are the platform names.
+   - Look for logos, headers, or "About Us" to find the true institute name.
 2. **STRICT NO-HALLUCINATION**: 
-   - Only extract information explicitly mentioned in the text.
-   - If a specific field (e.g., fee, duration, phone) is NOT in the text, you **MUST** return `null`.
-   - **NEVER** guess or invent phone numbers, emails, or dates.
-3. **CURRICULUM EXTRACTION**: 
-   - List every module title and every topic mentioned.
-   - If modules aren't numbered, group them logically by headers.
-4. **FORMAT**: Return ONLY valid, raw JSON. No markdown blocks.
-
-BROCHURE TEXT FOR ANALYSIS:
----
-{text_context}
----
+   - Only extract information explicitly mentioned.
+   - If a specific field is NOT in the text, you **MUST** return `null`.
+   - **NEVER** invent phone numbers or emails.
+3. **FORMAT**: Return ONLY valid, raw JSON. No markdown blocks.
 
 REQUIRED JSON STRUCTURE (Use `null` for missing values):
 {{
@@ -129,38 +114,69 @@ REQUIRED JSON STRUCTURE (Use `null` for missing values):
 """
 
         try:
-            print(f"DEBUG: Analyzing {file_path} with Gemini 1.5 Flash...")
-            # Use generation_config to force JSON if supported
-            response = self.model.generate_content(
-                prompt,
-                generation_config=genai.types.GenerationConfig(
-                    response_mime_type="application/json",
-                    temperature=0.1 # Low temperature for high precision
-                )
-            )
+            print(f"DEBUG: Uploading {file_path} to Gemini...")
             
+            # Use native PDF support for Gemini 1.5
+            if extension == ".pdf":
+                # Upload file to Gemini File API
+                uploaded_file = genai.upload_file(path=file_path)
+                print(f"DEBUG: File uploaded: {uploaded_file.name}")
+                
+                response = self.model.generate_content(
+                    [uploaded_file, prompt],
+                    generation_config=genai.types.GenerationConfig(
+                        response_mime_type="application/json",
+                        temperature=0.1
+                    )
+                )
+                
+                # Cleanup: Files are deleted after 48h, but we can't easily delete here without more logic
+                # For high-volume production, we should track and delete.
+            else:
+                # Fallback for DOCX or others where we extract text first
+                raw_text = await self.extract_text_from_file(file_path)
+                if not raw_text:
+                    raise ValueError("Could not extract text from the document.")
+                
+                response = self.model.generate_content(
+                    f"{prompt}\n\nDOCUMENT TEXT:\n{raw_text[:30000]}",
+                    generation_config=genai.types.GenerationConfig(
+                        response_mime_type="application/json",
+                        temperature=0.1
+                    )
+                )
+
             if not response.text:
                 raise ValueError("Gemini returned an empty response.")
                 
             data = json.loads(response.text)
             
-            # Post-processing to clean up "fake" names if Gemini slipped up
+            # Post-processing to clean up "fake" names
             forbidden_names = ["admitflow", "admissionflow", "admissions ai", "admit flow"]
             name = data.get("institute_name", "")
             if name and any(f in name.lower() for f in forbidden_names):
                 data["institute_name"] = "Unknown Institute"
                 
             return data
+            
         except Exception as e:
-            print(f"DEBUG: Gemini/Parsing Error: {str(e)}")
-            # Fallback parsing if JSON mode fails but text is returned
+            print(f"DEBUG: Gemini Analysis Error: {str(e)}")
+            # Last ditch effort: try extracting text and sending it normally if native PDF failed
             try:
-                text = response.text
-                if "```json" in text:
-                    text = text.split("```json")[1].split("```")[0].strip()
-                return json.loads(text)
+                raw_text = await self.extract_text_from_file(file_path)
+                if raw_text:
+                    response = self.model.generate_content(
+                        f"{prompt}\n\nDOCUMENT TEXT:\n{raw_text[:20000]}",
+                        generation_config=genai.types.GenerationConfig(
+                            response_mime_type="application/json",
+                            temperature=0.1
+                        )
+                    )
+                    return json.loads(response.text)
             except:
-                raise ValueError(f"Gemini Analysis failed to produce valid JSON: {str(e)}")
+                pass
+            raise ValueError(f"AI Analysis failed: {str(e)}")
+
 
     async def generate_pitch_script(self, context: str) -> dict:
         """
