@@ -7,6 +7,7 @@ import asyncio
 from typing import List, Optional, Any, Dict
 from google import genai
 from google.genai import types
+from openai import OpenAI
 from app.core.config import settings
 
 class AIAnalysisService:
@@ -14,10 +15,19 @@ class AIAnalysisService:
         self.gemini_key = settings.GEMINI_API_KEY
         if self.gemini_key:
             self.client = genai.Client(api_key=self.gemini_key)
-            # Use 'gemini-1.5-flash' as primary, but we'll try a few variants if it fails
             self.model_name = 'gemini-1.5-flash'
         else:
             self.client = None
+            
+        self.nvidia_key = settings.NVIDIA_API_KEY
+        self.nvidia_base_url = settings.NVIDIA_BASE_URL
+        if self.nvidia_key:
+            self.nvidia_client = OpenAI(
+                base_url=self.nvidia_base_url,
+                api_key=self.nvidia_key
+            )
+        else:
+            self.nvidia_client = None
 
     async def extract_text_from_file(self, file_path: str) -> str:
         """Extracts raw text from PDF or DOCX files."""
@@ -57,7 +67,24 @@ class AIAnalysisService:
         # 2. EMERGENCY REGEX FALLBACK
         regex_data = self._extract_contact_info_fallback(raw_text)
         
-        # 3. ATTEMPT AI ANALYSIS WITH EXPANDED FALLBACK
+        # 3. ATTEMPT NVIDIA ANALYSIS FIRST (As requested by user)
+        if self.nvidia_client:
+            try:
+                print(f"DEBUG: Attempting analysis with NVIDIA Mistral...")
+                nvidia_data = await self._analyze_with_nvidia(raw_text)
+                if nvidia_data:
+                    nvidia_data["status"] = "success"
+                    # Merge regex findings
+                    if not nvidia_data.get("contact", {}).get("phone") and regex_data["phone"]:
+                        nvidia_data.setdefault("contact", {})["phone"] = regex_data["phone"]
+                    if not nvidia_data.get("contact", {}).get("email") and regex_data["email"]:
+                        nvidia_data.setdefault("contact", {})["email"] = regex_data["email"]
+                    
+                    return self._sanitize_data(nvidia_data)
+            except Exception as e:
+                print(f"DEBUG: NVIDIA Analysis Error: {str(e)}")
+
+        # 4. ATTEMPT AI ANALYSIS WITH EXPANDED FALLBACK (Gemini)
         # List of models to try in order of preference
         # We use various versions to ensure compatibility across different API tiers/regions
         models_to_try = [
@@ -150,6 +177,40 @@ class AIAnalysisService:
         fname = os.path.basename(file_path).split("_", 1)[-1] if "_" in file_path else os.path.basename(file_path)
         return self._get_fallback_data(fname, "AI Analysis failed after trying all models. Check API logs for details.", regex_data)
 
+    async def _analyze_with_nvidia(self, text: str) -> Optional[dict]:
+        """Analyzes text using Nvidia Mistral-7B-Instruct."""
+        if not self.nvidia_client:
+            return None
+
+        prompt = self._get_analysis_prompt()
+        
+        try:
+            # We use Mistral-7B-Instruct-v0.3 as requested
+            completion = self.nvidia_client.chat.completions.create(
+                model="mistralai/mistral-7b-instruct-v0.3",
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant that extracts structured JSON data from educational documents."},
+                    {"role": "user", "content": f"{prompt}\n\nDOCUMENT CONTENT:\n{text[:10000]}"}
+                ],
+                temperature=0.2,
+                top_p=0.7,
+                max_tokens=2048,
+                stream=False # We want the full JSON at once for parsing
+            )
+
+            response_text = completion.choices[0].message.content.strip()
+            
+            # Clean markdown blocks if present
+            if response_text.startswith("```json"): 
+                response_text = response_text[7:].split("```")[0].strip()
+            elif response_text.startswith("```"): 
+                response_text = response_text[3:].split("```")[0].strip()
+            
+            return json.loads(response_text)
+        except Exception as e:
+            print(f"DEBUG: NVIDIA Mistral error: {e}")
+            return None
+
     def _sanitize_data(self, data: Any) -> Any:
         """Recursively replaces 'Not Found', 'N/A', etc. with null."""
         if isinstance(data, dict):
@@ -200,31 +261,62 @@ class AIAnalysisService:
 
     def _get_analysis_prompt(self) -> str:
         return """
-        You are a high-precision document extraction engine specializing in educational brochures and institute prospectuses. 
-        Your task is to convert the uploaded document into a structured JSON 'Neural Knowledge Base' for an AI Sales Agent.
+You are an expert document analyst for the coaching and education industry. 
+When a PDF or document is uploaded, extract ALL information and return it as a clean structured JSON object.
 
-        CRITICAL INSTRUCTIONS:
-        1. EXTRACT ALL DATA: Do not summarize. If a brochure lists 20 modules, extract all 20. If each module has 15 topics, extract all 15.
-        2. NO HALLUCINATIONS: Only extract what is present. If something is missing, use null or an empty list.
-        3. HIGH FIDELITY: Maintain the exact terminology used in the document.
-        4. JSON ONLY: Return ONLY a valid JSON object. No preamble, no markdown formatting (unless required by response_mime_type).
+STRICT RULES:
+- Return ONLY valid JSON. No bullet points. No markdown. No extra text.
+- Extract every single detail — institute name, contact, courses, all modules with all topics, fees, eligibility, duration, tools, learning outcomes, job scope, partners, FAQs, highlights.
+- For modules: list EVERY topic under each module — do not skip or summarize.
+- If any field is not found in the document, set it to null. Do not use strings like "NOT FOUND".
+- Never guess or invent information not present in the document.
+- Ensure 'institute_name' is ALWAYS present.
 
-        SCHEMA HIERARCHY:
-        - institute_name: Full legal name of the organization.
-        - institute_tagline: Core value proposition or slogan.
-        - contact: {phone, email, website, address, branches: []}
-        - courses: Array of objects {course_name, fee, eligibility, duration, total_hours, mode, coordinator, partner_institute}.
-        - modules: Array of objects {module_title, topics: []}. EXTRACT EVERY SINGLE TOPIC.
-        - learning_outcomes: Array of skills the student will gain.
-        - tools_technologies: List of software/tools taught (e.g. Python, AutoCAD, SAP).
-        - faqs: Array of {question, answer} from the document.
-        - industry_scope: Where can students work?
-        - job_roles: Specific designations (e.g. Full Stack Developer).
-        - partners: Hiring partners or corporate tie-ups.
-        - highlights: Key selling points (e.g. 100% Placement, ISO Certified).
+JSON STRUCTURE REQUIRED:
+{
+  "institute_name": "string or null",
+  "institute_tagline": "string or null",
+  "contact": {
+    "phone": "string or null",
+    "email": "string or null",
+    "website": "string or null",
+    "address": "string or null",
+    "branches": ["string"]
+  },
+  "courses": [
+    {
+      "course_name": "string",
+      "fee": "string or null",
+      "eligibility": "string or null",
+      "duration": "string or null",
+      "total_hours": "string or null",
+      "mode": "string or null",
+      "coordinator": "string or null",
+      "partner_institute": "string or null"
+    }
+  ],
+  "modules": [
+    {
+      "module_title": "string",
+      "topics": ["string"]
+    }
+  ],
+  "learning_outcomes": ["string"],
+  "tools_technologies": ["string"],
+  "industry_scope": ["string"],
+  "job_roles": ["string"],
+  "partners": ["string"],
+  "highlights": ["string"],
+  "faqs": [
+    {
+      "question": "string",
+      "answer": "string"
+    }
+  ]
+}
 
-        MAXIMIZE RECALL: It is better to have a long list of topics than a short one. The AI agent needs this data to answer complex student queries.
-        """
+MAXIMIZE RECALL: List EVERY single topic mentioned. The AI agent needs this data to answer complex student queries accurately.
+"""
 
     async def generate_pitch_script(self, context: str) -> dict:
         """

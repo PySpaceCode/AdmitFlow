@@ -10,12 +10,11 @@ passlib
 bcrypt==3.2.0
 python-multipart
 pandas
-openpyxl
 httpx
 python-dotenv
 uuid
 python-slugify
 openai
+google-genai
 pdfplumber
 python-docx
-google-genai

@@ -11,14 +11,6 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
     DATABASE_URL: str
-    
-    @field_validator("DATABASE_URL", mode="before")
-    @classmethod
-    def fix_database_url(cls, v: str) -> str:
-        if isinstance(v, str) and v.startswith("postgres://"):
-            return v.replace("postgres://", "postgresql://", 1)
-        return v
-
 
     # CORS
     BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = []
@@ -36,6 +28,8 @@ class Settings(BaseSettings):
     SARVAM_API_KEY: Optional[str] = None
     OPENAI_API_KEY: Optional[str] = None
     GEMINI_API_KEY: Optional[str] = None
+    NVIDIA_API_KEY: Optional[str] = "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"
+    NVIDIA_BASE_URL: str = "https://integrate.api.nvidia.com/v1"
 
     class Config:
         case_sensitive = True

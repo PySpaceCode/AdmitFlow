@@ -4,9 +4,8 @@ from .base import BaseSchema
 
 class KnowledgeBaseDocumentResponse(BaseSchema):
     id: int
-    file_name: str
+    fileName: str
     status: str
-    ai_report: Optional[str] = None
     created_at: datetime
 
 class PersonaSchema(BaseSchema):

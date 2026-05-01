@@ -11,7 +11,7 @@ from app.core import security
 
 router = APIRouter()
 
-@router.post("/seed", summary="Seed database with demo data (institute, user, leads, persona, script)")
+@router.post("/seed")
 def seed_data(db: Session = Depends(deps.get_db)):
     # 1. Create Institute
     demo_inst = db.query(Institute).filter(Institute.name == "Demo University").first()

@@ -1,19 +1,20 @@
 import os
 import shutil
-import json
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status, Body
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status, BackgroundTasks
 from sqlalchemy.orm import Session
-from typing import List, Dict, Any
+from typing import List
 from app.api import deps
 from app.models.knowledge import KnowledgeBaseDocument, Persona
 from app.models.script import Script
 from app.schemas.knowledge_base import PersonaSchema, ScriptSchema, KnowledgeBaseDocumentResponse
+from app.services.ai_analysis import ai_analysis_service
+import json
 
 router = APIRouter()
 
 UPLOAD_DIR = "uploads/knowledge"
 
-@router.get("/documents", summary="List all uploaded knowledge base documents")
+@router.get("/documents")
 def get_documents(
     db: Session = Depends(deps.get_db),
     institute_id: int = Depends(deps.get_current_institute_id)
@@ -22,8 +23,25 @@ def get_documents(
     # Manual mapping to camelCase for the schema if needed, but the middleware wraps the response
     return docs
 
-@router.post("/upload", summary="Upload a PDF/DOCX knowledge base document")
+async def run_ai_analysis(doc_id: int, file_path: str, db: Session):
+    try:
+        report = await ai_analysis_service.analyze_document(file_path)
+        
+        doc = db.query(KnowledgeBaseDocument).filter(KnowledgeBaseDocument.id == doc_id).first()
+        if doc:
+            doc.ai_report = json.dumps(report)
+            doc.status = "processed"
+            db.commit()
+    except Exception as e:
+        print(f"Error in background analysis: {e}")
+        doc = db.query(KnowledgeBaseDocument).filter(KnowledgeBaseDocument.id == doc_id).first()
+        if doc:
+            doc.status = "error"
+            db.commit()
+
+@router.post("/upload")
 async def upload_document(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(..., alias="file"),
     db: Session = Depends(deps.get_db),
     institute_id: int = Depends(deps.get_current_institute_id)
@@ -37,97 +55,70 @@ async def upload_document(
     except Exception as e:
         raise HTTPException(status_code=500, detail="Could not save file")
     
-    try:
-        from app.services.ai_analysis import ai_analysis_service
-        extracted_data = await ai_analysis_service.analyze_document(file_path)
-    except Exception as e:
-        print(f"CRITICAL ERROR: Knowledge extraction failed for {file.filename}: {str(e)}")
-        # Provide a complete empty structure so the frontend doesn't show "not found" for everything
-        extracted_data = {
-            "institute_name": "Analysis Failed",
-            "institute_tagline": str(e),
-            "status": "error",
-            "contact": {"phone": None, "email": None, "website": None, "address": None, "branches": []},
-            "courses": [],
-            "modules": [],
-            "learning_outcomes": [],
-            "tools_technologies": [],
-            "industry_scope": [],
-            "job_roles": [],
-            "partners": [],
-            "highlights": [],
-            "faqs": [],
-            "error_detail": str(e)
-        }
+    new_doc = KnowledgeBaseDocument(
+        institute_id=institute_id,
+        file_name=file.filename,
+        file_url=f"/static/knowledge/{institute_id}_{file.filename}",
+        status="processing",
+        ai_report=None
+    )
+    db.add(new_doc)
+    db.commit()
+    db.refresh(new_doc)
     
-    import json
-    # Check if document already exists to prevent duplicates
-    existing_doc = db.query(KnowledgeBaseDocument).filter(
-        KnowledgeBaseDocument.institute_id == institute_id,
-        KnowledgeBaseDocument.file_name == file.filename
-    ).first()
-
-    if existing_doc:
-        existing_doc.status = "processed"
-        existing_doc.ai_report = json.dumps(extracted_data)
-        db.commit()
-        db.refresh(existing_doc)
-        new_doc = existing_doc
-    else:
-        new_doc = KnowledgeBaseDocument(
-            institute_id=institute_id,
-            file_name=file.filename,
-            file_url=f"/static/knowledge/{institute_id}_{file.filename}",
-            status="processed",
-            ai_report=json.dumps(extracted_data)
-        )
-        db.add(new_doc)
+    # Trigger AI analysis as a background task to not block the upload response
+    # However, since the frontend expects the report immediately, we might want to do it synchronously
+    # OR we can update the frontend to poll.
+    # For now, let's try to do it synchronously if it's not too slow, or just return and let them poll.
+    # Actually, the user wants to see the analysis. Let's do it synchronously for better "WOW" effect if it finishes quickly.
+    
+    try:
+        report = await ai_analysis_service.analyze_document(file_path)
+        new_doc.ai_report = json.dumps(report)
+        new_doc.status = "processed"
         db.commit()
         db.refresh(new_doc)
+    except Exception as e:
+        print(f"Analysis failed during upload: {e}")
+        # We'll leave it as "processing" or set to "error"
     
-    # Ensure we return a dictionary for aiReport, not a string
-    try:
-        report_data = json.loads(new_doc.ai_report) if isinstance(new_doc.ai_report, str) else new_doc.ai_report
-    except:
-        report_data = extracted_data
-
     return {
         "success": True,
-        "message": "File uploaded and processed",
+        "message": "File uploaded and analyzed",
         "data": {
             "id": new_doc.id,
             "fileName": new_doc.file_name,
             "status": new_doc.status,
-            "aiReport": report_data,
+            "aiReport": new_doc.ai_report,
             "uploadedAt": new_doc.created_at.isoformat()
         }
     }
 
-@router.patch("/documents/{document_id}", summary="Update a document's AI report manually")
+@router.patch("/documents/{doc_id}/report")
 async def update_document_report(
-    document_id: int,
-    report_update: Dict[str, Any] = Body(...),
+    doc_id: int,
+    report_data: dict,
     db: Session = Depends(deps.get_db),
     institute_id: int = Depends(deps.get_current_institute_id)
 ):
     doc = db.query(KnowledgeBaseDocument).filter(
-        KnowledgeBaseDocument.id == document_id,
+        KnowledgeBaseDocument.id == doc_id,
         KnowledgeBaseDocument.institute_id == institute_id
     ).first()
     
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
-        
-    doc.ai_report = json.dumps(report_update)
+    
+    doc.ai_report = json.dumps(report_data)
     db.commit()
     
     return {
-        "success": True, 
-        "message": "Neural data synced successfully",
-        "data": report_update
+        "success": True,
+        "message": "Knowledge updated successfully",
+        "data": report_data
     }
 
-@router.post("/persona", summary="Save or update the AI agent persona")
+@router.post("/persona")
 def save_persona(
     persona_data: PersonaSchema,
     db: Session = Depends(deps.get_db),
@@ -136,21 +127,13 @@ def save_persona(
     persona = db.query(Persona).filter(Persona.institute_id == institute_id).first()
     if not persona:
         persona = Persona(institute_id=institute_id)
-        
-    # Auto-generate persona description if not provided or to match user requirement
-    desc = persona_data.persona_description
-    if not desc:
-        desc = (f"You are a {persona_data.tone_style.lower() if persona_data.tone_style else 'helpful'} "
-                f"and enthusiastic {persona_data.designation if persona_data.designation else 'admissions counselor'} "
-                f"representing the university. Your goal is to guide prospective students through the enrollment process "
-                f"using a {persona_data.voice_gender.lower() if persona_data.voice_gender else 'friendly'} voice.")
     
     persona.agent_name = persona_data.agent_name
     persona.designation = persona_data.designation
     persona.tone_style = persona_data.tone_style
     persona.voice_gender = persona_data.voice_gender
     persona.voice_speed = persona_data.voice_speed
-    persona.persona_description = desc
+    persona.persona_description = persona_data.persona_description
     
     db.add(persona)
     db.commit()
@@ -170,7 +153,7 @@ def save_persona(
         }
     }
 
-@router.post("/script", summary="Save or update the calling script")
+@router.post("/script")
 def save_script(
     script_data: ScriptSchema,
     db: Session = Depends(deps.get_db),
