@@ -36,9 +36,13 @@ class ResponseWrapperMiddleware(BaseHTTPMiddleware):
         try:
             data = json.loads(response_body)
             
+            headers = dict(response.headers)
+            if "content-length" in headers:
+                del headers["content-length"]
+
             # If already FULLY wrapped with success key, just return as is
             if isinstance(data, dict) and "success" in data:
-                return JSONResponse(content=data, status_code=response.status_code, headers=dict(response.headers))
+                return JSONResponse(content=data, status_code=response.status_code, headers=headers)
             
             # Success logic
             is_success = response.status_code < 400
@@ -55,7 +59,7 @@ class ResponseWrapperMiddleware(BaseHTTPMiddleware):
                 if request.method == "POST" and status_code == 200:
                     status_code = 201
                     
-                return JSONResponse(content=wrapped_data, status_code=status_code, headers=dict(response.headers))
+                return JSONResponse(content=wrapped_data, status_code=status_code, headers=headers)
             else:
                 # If it's an error but NOT wrapped (e.g. from FastAPI defaults)
                 return JSONResponse(
@@ -65,7 +69,7 @@ class ResponseWrapperMiddleware(BaseHTTPMiddleware):
                         "message": data["detail"] if isinstance(data, dict) and "detail" in data else "An error occurred",
                         "data": None
                     },
-                    headers=dict(response.headers)
+                    headers=headers
                 )
         except Exception:
             # Fallback for non-JSON or raw responses
@@ -74,6 +78,10 @@ class ResponseWrapperMiddleware(BaseHTTPMiddleware):
             except:
                 content = str(response_body)
                 
+            headers = dict(response.headers)
+            if "content-length" in headers:
+                del headers["content-length"]
+
             return JSONResponse(
                 content={
                     "success": response.status_code < 400,
@@ -85,6 +93,7 @@ class ResponseWrapperMiddleware(BaseHTTPMiddleware):
                     } if response.status_code >= 400 else None
                 },
                 status_code=response.status_code,
-                headers=dict(response.headers)
+                headers=headers
             )
+
         
