@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     # Services
     SARVAM_API_KEY: Optional[str] = None
     OPENAI_API_KEY: Optional[str] = None
+    GEMINI_API_KEY: Optional[str] = None
 
     class Config:
         case_sensitive = True

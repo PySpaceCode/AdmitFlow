@@ -3,12 +3,17 @@ import json
 import pdfplumber
 import docx
 from typing import List, Optional
-from openai import AsyncOpenAI
+import google.generativeai as genai
 from app.core.config import settings
 
 class AIAnalysisService:
     def __init__(self):
-        self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY) if settings.OPENAI_API_KEY else None
+        self.gemini_key = settings.GEMINI_API_KEY
+        if self.gemini_key:
+            genai.configure(api_key=self.gemini_key)
+            self.model = genai.GenerativeModel('gemini-1.5-flash')
+        else:
+            self.model = None
 
     async def extract_text_from_file(self, file_path: str) -> str:
         """Extracts raw text from PDF or DOCX files."""
@@ -27,7 +32,6 @@ class AIAnalysisService:
                 for para in doc.paragraphs:
                     text += para.text + "\n"
             else:
-                # Basic text file fallback
                 with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                     text = f.read()
         except Exception as e:
@@ -38,130 +42,143 @@ class AIAnalysisService:
 
     async def analyze_document(self, file_path: str) -> dict:
         """
-        Analyzes the attached brochure/document and extracts ALL information into the strict JSON structure.
+        Analyzes the document using Google Gemini (Free Tier Alternative).
         """
-        if not self.client:
-            raise ValueError("OpenAI API Key is not configured")
+        if not self.model:
+            raise ValueError("Gemini API Key is not configured. Please get a free key from https://aistudio.google.com/")
 
         raw_text = await self.extract_text_from_file(file_path)
         print(f"DEBUG: Extracted text length: {len(raw_text)}")
+        
         if not raw_text:
-            print(f"DEBUG: Failed to extract text from {file_path}")
-            raise ValueError("Could not extract text from the document. The file might be empty, password-protected, or contains only images without OCR.")
+            raise ValueError("Could not extract text from the document.")
 
-        # Limit text to 15k chars to fit context window and keep costs down
-        text_context = raw_text[:15000]
+        text_context = raw_text[:30000] # Gemini has larger context, but we stay safe
 
         prompt = f"""
-You are a highly accurate document analyst. Your task is to extract data from the provided BROCHURE TEXT.
+You are a highly precise document analyst. Your mission is to extract structured data from the provided BROCHURE TEXT.
 
 TARGET DOCUMENT: {os.path.basename(file_path)}
 
-STRICT REQUIREMENTS:
-1. INSTITUTE NAME: Extract the name of the school/college/institute/company from the brochure. 
-   - CRITICAL: "AdmitFlow", "AdmissionFlow", "Admissions AI", or "Admission AI" are the PLATFORM names. 
-   - DO NOT use these as the institute_name unless the brochure is specifically about them.
-   - If the institute name is not clearly mentioned, set it to null.
-2. NO HALLUCINATION: If a piece of information (like fee, duration, phone) is not in the text, set it to null. Do not invent it.
-3. FULL EXTRACTION: List EVERY single module and topic found. If there are many, include all of them.
-4. VALID JSON: Return only a raw JSON object matching the schema below.
+CRITICAL CONSTRAINTS (MANDATORY):
+1. **INSTITUTE IDENTITY**: Identify the REAL organization the brochure is about.
+   - **DO NOT** use "AdmitFlow", "AdmissionFlow", "Admissions AI", or "AdmitFlow AI". These are the SOFTWARE PLATFORMS, not the school/company.
+   - Look for headers, footers, or the "About Us" section to find the true institute name.
+2. **STRICT NO-HALLUCINATION**: 
+   - Only extract information explicitly mentioned in the text.
+   - If a specific field (e.g., fee, duration, phone) is NOT in the text, you **MUST** return `null`.
+   - **NEVER** guess or invent phone numbers, emails, or dates.
+3. **CURRICULUM EXTRACTION**: 
+   - List every module title and every topic mentioned.
+   - If modules aren't numbered, group them logically by headers.
+4. **FORMAT**: Return ONLY valid, raw JSON. No markdown blocks.
 
-BROCHURE TEXT:
+BROCHURE TEXT FOR ANALYSIS:
 ---
 {text_context}
 ---
 
-EXPECTED JSON SCHEMA:
+REQUIRED JSON STRUCTURE (Use `null` for missing values):
 {{
-  "institute_name": "Exact name of the institute",
-  "institute_tagline": "Tagline if found",
+  "institute_name": "string or null",
+  "institute_tagline": "string or null",
   "contact": {{
-    "phone": "string",
-    "email": "string",
-    "website": "string",
-    "address": "string",
-    "branches": ["branch1", "branch2"]
+    "phone": "string or null",
+    "email": "string or null",
+    "website": "string or null",
+    "address": "string or null",
+    "branches": ["string"]
   }},
   "courses": [
     {{
-      "course_name": "string",
-      "course_code": "string",
-      "eligibility": "string",
-      "duration": "string",
-      "total_hours": "string",
-      "fee": "number or string",
-      "fee_note": "string",
-      "mode": "string",
-      "coordinator": "string",
-      "partner_institute": "string"
+      "course_name": "string or null",
+      "course_code": "string or null",
+      "eligibility": "string or null",
+      "duration": "string or null",
+      "total_hours": "string or null",
+      "fee": "number or string or null",
+      "fee_note": "string or null",
+      "mode": "string or null",
+      "coordinator": "string or null",
+      "partner_institute": "string or null"
     }}
   ],
   "modules": [
     {{
-      "module_number": 1,
+      "module_number": "number",
       "module_title": "string",
-      "topics": ["topic1", "topic2"]
+      "topics": ["string"]
     }}
   ],
-  "learning_outcomes": ["outcome1"],
-  "tools_technologies": ["tool1"],
-  "industry_scope": ["scope1"],
-  "job_roles": ["role1"],
-  "partners": ["partner1"],
-  "accreditation": "string",
-  "naac_grade": "string",
-  "placement_support": "string",
+  "learning_outcomes": ["string"],
+  "tools_technologies": ["string"],
+  "industry_scope": ["string"],
+  "job_roles": ["string"],
+  "partners": ["string"],
+  "accreditation": "string or null",
+  "naac_grade": "string or null",
+  "placement_support": "string or null",
   "faqs": [
     {{
       "question": "string",
       "answer": "string"
     }}
   ],
-  "other_highlights": ["highlight1"]
+  "other_highlights": ["string"]
 }}
 """
 
         try:
-            print(f"DEBUG: Sending request to OpenAI for {file_path}...")
-            response = await self.client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": "You are a professional educational data extractor. Output ONLY raw JSON."},
-                    {"role": "user", "content": prompt}
-                ],
-                response_format={"type": "json_object"},
-                temperature=0
+            print(f"DEBUG: Analyzing {file_path} with Gemini 1.5 Flash...")
+            # Use generation_config to force JSON if supported
+            response = self.model.generate_content(
+                prompt,
+                generation_config=genai.types.GenerationConfig(
+                    response_mime_type="application/json",
+                    temperature=0.1 # Low temperature for high precision
+                )
             )
             
-            content = response.choices[0].message.content
-            print("DEBUG: OpenAI Response received successfully.")
-            return json.loads(content)
+            if not response.text:
+                raise ValueError("Gemini returned an empty response.")
+                
+            data = json.loads(response.text)
+            
+            # Post-processing to clean up "fake" names if Gemini slipped up
+            forbidden_names = ["admitflow", "admissionflow", "admissions ai", "admit flow"]
+            name = data.get("institute_name", "")
+            if name and any(f in name.lower() for f in forbidden_names):
+                data["institute_name"] = "Unknown Institute"
+                
+            return data
         except Exception as e:
-            print(f"DEBUG: OpenAI/Parsing Error: {str(e)}")
-            raise ValueError(f"AI Analysis failed: {str(e)}")
-
+            print(f"DEBUG: Gemini/Parsing Error: {str(e)}")
+            # Fallback parsing if JSON mode fails but text is returned
+            try:
+                text = response.text
+                if "```json" in text:
+                    text = text.split("```json")[1].split("```")[0].strip()
+                return json.loads(text)
+            except:
+                raise ValueError(f"Gemini Analysis failed to produce valid JSON: {str(e)}")
 
     async def generate_pitch_script(self, context: str) -> dict:
         """
-        Uses LLM context to generate a 5-part pitch script.
+        Generates a pitch script using Gemini.
         """
-        if not self.client:
-            # Fallback mock if no client
-            return {
-                "sections": [
-                    {"id": 1, "title": "Opening", "script": "Hi, I'm {AgentName}...", "instruction": "Warm"}
-                ]
-            }
+        if not self.model:
+            return {"sections": []}
 
-        prompt = f"Based on this context: {context[:2000]}, generate a professional 5-part sales pitch script for an AI admissions counselor. Return as JSON with a 'sections' key containing objects with 'id', 'title', 'script', and 'instruction'."
+        prompt = f"Based on this context: {context[:5000]}, generate a professional 5-part sales pitch script for an AI admissions counselor. Return as JSON with a 'sections' key containing objects with 'id', 'title', 'script', and 'instruction'."
         
         try:
-            response = await self.client.chat.completions.create(
-                model="gpt-4o",
-                messages=[{"role": "user", "content": prompt}],
-                response_format={"type": "json_object"}
+            response = self.model.generate_content(
+                prompt,
+                generation_config=genai.types.GenerationConfig(
+                    response_mime_type="application/json"
+                )
             )
-            return json.loads(response.choices[0].message.content)
+            return json.loads(response.text)
         except:
             return {"sections": []}
 
