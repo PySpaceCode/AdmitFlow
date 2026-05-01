@@ -73,13 +73,22 @@ async def upload_leads_file(
         
         # Check for duplicates within the same institute
         existing = db.query(Lead).filter(Lead.phone == phone, Lead.institute_id == institute_id).first()
-        if existing:
-            skipped_leads += 1
-            continue
         
         # Support common column variations
-        name_val = row.get('name') or row.get('student name') or row.get('full name') or 'Unknown'
+        name_val = str(row.get('name') or row.get('student name') or row.get('full name') or 'Unknown').strip()
         course_val = row.get('course') or row.get('course interest') or row.get('subject') or ''
+
+        if existing:
+            # If the existing lead has an "Unknown" name, update it with the new name
+            if existing.name == "Unknown" and name_val != "Unknown":
+                existing.name = name_val
+                if not existing.course and course_val:
+                    existing.course = str(course_val).strip()
+                db.add(existing)
+                saved_leads += 1
+            else:
+                skipped_leads += 1
+            continue
         
         new_lead = Lead(
             institute_id=institute_id,
