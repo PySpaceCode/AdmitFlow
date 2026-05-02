@@ -61,18 +61,19 @@ class AIAnalysisService:
         if not self.client:
             raise ValueError("Gemini API Key is not configured.")
 
-        # 1. EXTRACT TEXT LOCALLY (as fallback/context)
+        # 1. EXTRACT TEXT LOCALLY
         raw_text = await self.extract_text_from_file(file_path)
+        print(f"DEBUG: Extracted {len(raw_text)} characters from {file_path}")
         
         # 2. EMERGENCY REGEX FALLBACK
         regex_data = self._extract_contact_info_fallback(raw_text)
         
-        # 3. ATTEMPT NVIDIA ANALYSIS FIRST (As requested by user)
-        if self.nvidia_client:
+        # 3. ATTEMPT NVIDIA ANALYSIS FIRST
+        if self.nvidia_client and len(raw_text) > 100:
             try:
                 print(f"DEBUG: Attempting analysis with NVIDIA Mistral...")
                 nvidia_data = await self._analyze_with_nvidia(raw_text)
-                if nvidia_data:
+                if nvidia_data and nvidia_data.get("institute_name"):
                     nvidia_data["status"] = "success"
                     # Merge regex findings
                     if not nvidia_data.get("contact", {}).get("phone") and regex_data["phone"]:
@@ -85,53 +86,51 @@ class AIAnalysisService:
                 print(f"DEBUG: NVIDIA Analysis Error: {str(e)}")
 
         # 4. ATTEMPT AI ANALYSIS WITH EXPANDED FALLBACK (Gemini)
-        # List of models to try in order of preference
-        # We use various versions to ensure compatibility across different API tiers/regions
         models_to_try = [
-            "gemini-2.0-flash",
             "gemini-1.5-flash",
-            "gemini-1.5-flash-8b",
             "gemini-1.5-pro",
             "gemini-2.0-flash-exp"
         ]
         
         prompt = self._get_analysis_prompt()
-        last_error = None
         
         # Read file bytes for multimodal analysis if it's a PDF
         file_bytes = None
-        mime_type = "application/pdf" if file_path.lower().endswith('.pdf') else None
+        mime_type = None
+        if file_path.lower().endswith('.pdf'):
+            mime_type = "application/pdf"
+        elif file_path.lower().endswith('.png') or file_path.lower().endswith('.jpg') or file_path.lower().endswith('.jpeg'):
+            mime_type = "image/png" if file_path.lower().endswith('.png') else "image/jpeg"
+
         if mime_type:
             try:
                 with open(file_path, "rb") as f:
                     file_bytes = f.read()
-            except:
+                    print(f"DEBUG: Read {len(file_bytes)} bytes for multimodal analysis")
+            except Exception as e:
+                print(f"DEBUG: Error reading file bytes: {e}")
                 file_bytes = None
 
         for model in models_to_try:
             try:
                 print(f"DEBUG: Attempting analysis with model: {model}")
                 
-                contents = []
+                # Instruction first for better compliance
+                contents = [types.Part.from_text(text=prompt)]
+                
                 if file_bytes and mime_type:
-                    # Multimodal content: PDF + Prompt
-                    contents = [
-                        types.Part.from_bytes(data=file_bytes, mime_type=mime_type),
-                        types.Part.from_text(text=prompt)
-                    ]
-                else:
-                    # Text-only content
-                    contents = [f"{prompt}\n\nDOCUMENT CONTENT:\n{raw_text[:30000]}"]
+                    contents.append(types.Part.from_bytes(data=file_bytes, mime_type=mime_type))
+                
+                # Always add text content if available
+                if raw_text:
+                    contents.append(types.Part.from_text(text=f"RAW TEXT CONTENT:\n{raw_text[:20000]}"))
 
-                # We use a safety setting to avoid empty responses on harmless educational content
                 response = self.client.models.generate_content(
                     model=model,
                     contents=contents,
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
-                        temperature=0.1,
-                        top_p=0.95,
-                        top_k=40
+                        temperature=0.0 # Lowest temperature for maximum factuality
                     )
                 )
                 
@@ -140,42 +139,42 @@ class AIAnalysisService:
                     continue
 
                 clean_text = response.text.strip()
-                # Clean markdown blocks if present
                 if clean_text.startswith("```json"): 
                     clean_text = clean_text[7:].split("```")[0].strip()
                 elif clean_text.startswith("```"): 
                     clean_text = clean_text[3:].split("```")[0].strip()
                 
-                # Try to fix common JSON issues if parsing fails
                 try:
                     data = json.loads(clean_text)
                 except json.JSONDecodeError:
-                    # Attempt a simple cleanup: remove trailing commas before closing braces/brackets
                     clean_text = re.sub(r',\s*([\]}])', r'\1', clean_text)
                     data = json.loads(clean_text)
 
+                # Validation: if institute_name is generic or missing, it's a poor extraction
+                inst_name = str(data.get("institute_name", "")).lower()
+                if not inst_name or inst_name in ["null", "not found", "unknown", "analysis failed", "none"]:
+                    print(f"DEBUG: Model {model} returned generic/missing institute name.")
+                    continue
+
                 data["status"] = "success"
                 
-                # Merge regex findings if AI missed them
+                # Merge regex findings
                 if not data.get("contact", {}).get("phone") and regex_data["phone"]:
                     data.setdefault("contact", {})["phone"] = regex_data["phone"]
                 if not data.get("contact", {}).get("email") and regex_data["email"]:
                     data.setdefault("contact", {})["email"] = regex_data["email"]
                     
                 print(f"DEBUG: Successfully extracted data using {model}")
-                
-                # FINAL POLISH: Recursively remove "NOT FOUND", "N/A", "None" strings
                 return self._sanitize_data(data)
 
             except Exception as e:
                 print(f"DEBUG: Gemini Analysis Error ({model}): {str(e)}")
-                await asyncio.sleep(1) # Small delay before retry
                 continue
 
         # If all models failed
         print(f"CRITICAL ERROR: All Gemini models failed for {file_path}")
         fname = os.path.basename(file_path).split("_", 1)[-1] if "_" in file_path else os.path.basename(file_path)
-        return self._get_fallback_data(fname, "AI Analysis failed after trying all models. Check API logs for details.", regex_data)
+        return self._get_fallback_data(fname, "AI failed to extract genuine data. Please check if the document is readable.", regex_data)
 
     async def _analyze_with_nvidia(self, text: str) -> Optional[dict]:
         """Analyzes text using Nvidia Mistral-7B-Instruct."""
@@ -189,13 +188,13 @@ class AIAnalysisService:
             completion = self.nvidia_client.chat.completions.create(
                 model="mistralai/mistral-7b-instruct-v0.3",
                 messages=[
-                    {"role": "system", "content": "You are a helpful assistant that extracts structured JSON data from educational documents."},
+                    {"role": "system", "content": "You are a professional Data Extraction Specialist. You extract ONLY genuine, factual data from documents into valid JSON."},
                     {"role": "user", "content": f"{prompt}\n\nDOCUMENT CONTENT:\n{text[:10000]}"}
                 ],
-                temperature=0.2,
-                top_p=0.7,
+                temperature=0.1,
+                top_p=1.0,
                 max_tokens=2048,
-                stream=False # We want the full JSON at once for parsing
+                stream=False
             )
 
             response_text = completion.choices[0].message.content.strip()
@@ -219,7 +218,8 @@ class AIAnalysisService:
             return [self._sanitize_data(v) for v in data]
         elif isinstance(data, str):
             lowered = data.lower().strip()
-            if lowered in ["not found", "n/a", "none", "null", "not available", "unknown"]:
+            # ONLY match exact boilerplate, not descriptions containing these words
+            if lowered in ["not found", "n/a", "none", "null", "not available", "unknown", "unknown institute"]:
                 return None
         return data
 
@@ -261,61 +261,59 @@ class AIAnalysisService:
 
     def _get_analysis_prompt(self) -> str:
         return """
-You are an expert document analyst for the coaching and education industry. 
-When a PDF or document is uploaded, extract ALL information and return it as a clean structured JSON object.
+You are a highly precise Data Extraction Engine for educational institutions. Your goal is to convert the provided brochure into a structured JSON database with 100% accuracy.
 
-STRICT RULES:
-- Return ONLY valid JSON. No bullet points. No markdown. No extra text.
-- Extract every single detail — institute name, contact, courses, all modules with all topics, fees, eligibility, duration, tools, learning outcomes, job scope, partners, FAQs, highlights.
-- For modules: list EVERY topic under each module — do not skip or summarize.
-- If any field is not found in the document, set it to null. Do not use strings like "NOT FOUND".
-- Never guess or invent information not present in the document.
-- Ensure 'institute_name' is ALWAYS present.
+CRITICAL INSTRUCTIONS:
+1. **ZERO HALLUCINATION**: Only extract data that is LITERALLY present in the document. Do not invent fees, dates, or contact details. Do not use any external knowledge.
+2. **GENUINE ONLY**: If a field is not found in the text, you MUST set it to `null`. Do not provide generic values like "Contact us", "Unknown", or "Coming soon".
+3. **EXHAUSTIVE EXTRACTION**:
+   - For **Modules**: List every single chapter, unit, or topic mentioned. This is the most important part for training the AI Agent.
+   - For **Courses**: Extract all variations, their duration, and specific eligibility criteria.
+4. **NO PLACEHOLDERS**: If the document doesn't mention branches, "branches" should be `[]`.
+5. **PITCH SUMMARY**: Create a 2-sentence summary that HIGHLIGHTS THE FACTS found in the document.
 
-JSON STRUCTURE REQUIRED:
+OUTPUT FORMAT (STRICT JSON):
 {
-  "institute_name": "string or null",
-  "institute_tagline": "string or null",
+  "institute_name": "Full official name",
+  "institute_tagline": "Slogan (null if not found)",
+  "pitch_summary": "Fact-based summary",
   "contact": {
-    "phone": "string or null",
-    "email": "string or null",
-    "website": "string or null",
-    "address": "string or null",
-    "branches": ["string"]
+    "phone": "Extract all found numbers",
+    "email": "Extract all found emails",
+    "website": "Extract official URL",
+    "address": "Full physical address if found",
+    "branches": ["List all branch locations mentioned"]
   },
   "courses": [
     {
-      "course_name": "string",
-      "fee": "string or null",
-      "eligibility": "string or null",
-      "duration": "string or null",
-      "total_hours": "string or null",
-      "mode": "string or null",
-      "coordinator": "string or null",
-      "partner_institute": "string or null"
+      "course_name": "Full name",
+      "fee": "Amount with currency (null if not found)",
+      "eligibility": "Prerequisites",
+      "duration": "Total time",
+      "total_hours": "Number of hours if mentioned",
+      "mode": "Online/Offline/Hybrid",
+      "coordinator": "Name of course head"
     }
   ],
   "modules": [
     {
-      "module_title": "string",
-      "topics": ["string"]
+      "module_title": "Module Title",
+      "topics": ["Exhaustive list of all sub-topics in this module"]
     }
   ],
-  "learning_outcomes": ["string"],
-  "tools_technologies": ["string"],
-  "industry_scope": ["string"],
-  "job_roles": ["string"],
-  "partners": ["string"],
-  "highlights": ["string"],
+  "learning_outcomes": ["Specific skills listed"],
+  "tools_technologies": ["Software/Languages mentioned"],
+  "industry_scope": ["Career growth mentions"],
+  "job_roles": ["Roles listed (e.g. Developer, Analyst)"],
+  "partners": ["Placement/Academic partners"],
+  "highlights": ["USPs like 'Award winning', 'ISO certified', etc."],
   "faqs": [
     {
-      "question": "string",
-      "answer": "string"
+      "question": "Question from document",
+      "answer": "Answer from document"
     }
   ]
 }
-
-MAXIMIZE RECALL: List EVERY single topic mentioned. The AI agent needs this data to answer complex student queries accurately.
 """
 
     async def generate_pitch_script(self, context: str) -> dict:
